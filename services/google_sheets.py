@@ -34,20 +34,60 @@ class LeadLogger:
         if self.sheet_id and self.creds_path:
             try:
                 if os.path.exists(self.creds_path):
-                    from google.oauth2 import service_account
+                    import json
                     from googleapiclient.discovery import build
-
-                    # Authenticate using the Service Account JSON credentials
-                    creds = service_account.Credentials.from_service_account_file(
-                        self.creds_path,
-                        scopes=['https://www.googleapis.com/auth/spreadsheets']
-                    )
+                    
+                    # Read the credentials file to check its type
+                    with open(self.creds_path, 'r') as f:
+                        creds_data = json.load(f)
+                    
+                    scopes = ['https://www.googleapis.com/auth/spreadsheets']
+                    
+                    if creds_data.get("type") == "service_account":
+                        # Standard Service Account Flow
+                        from google.oauth2 import service_account
+                        creds = service_account.Credentials.from_service_account_file(
+                            self.creds_path,
+                            scopes=scopes
+                        )
+                        print("[GoogleSheetsLogger] Using Service Account authentication credentials.")
+                    else:
+                        # User OAuth 2.0 Web/Installed Flow
+                        from google.oauth2.credentials import Credentials
+                        from google.auth.transport.requests import Request
+                        from google_auth_oauthlib.flow import InstalledAppFlow
+                        
+                        token_path = 'token.json'
+                        creds = None
+                        
+                        # Load previous login session token if it exists
+                        if os.path.exists(token_path):
+                            creds = Credentials.from_authorized_user_file(token_path, scopes)
+                        
+                        # Trigger authorization flow if token is expired or missing
+                        if not creds or not creds.valid:
+                            if creds and creds.expired and creds.refresh_token:
+                                creds.refresh(Request())
+                            else:
+                                flow = InstalledAppFlow.from_client_secrets_file(
+                                    self.creds_path,
+                                    scopes=scopes
+                                )
+                                print("[GoogleSheetsLogger] Redirecting to Google account authentication flow in your web browser...")
+                                creds = flow.run_local_server(port=0)
+                            
+                            # Save credentials session for future runs
+                            with open(token_path, 'w') as token_file:
+                                token_file.write(creds.to_json())
+                        
+                        print("[GoogleSheetsLogger] Using User OAuth 2.0 authentication credentials.")
+                    
                     self.service = build('sheets', 'v4', credentials=creds)
                     self.use_sheets = True
                     print("[GoogleSheetsLogger] Initialized Google Sheets API service successfully.")
                     self._initialize_sheets_header_if_empty()
                 else:
-                    print(f"[GoogleSheetsLogger] Service account key file not found at '{self.creds_path}'. Using local CSV fallback.")
+                    print(f"[GoogleSheetsLogger] Key file not found at '{self.creds_path}'. Using local CSV fallback.")
             except Exception as e:
                 print(f"[GoogleSheetsLogger] Failed to initialize Google Sheets service: {e}. Using local CSV fallback.")
         else:

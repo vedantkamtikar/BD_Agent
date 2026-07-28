@@ -41,6 +41,8 @@ venv.bak/
 .env.development.local
 .env.test.local
 .env.production.local
+client_secrets.json
+token.json
 
 # Output files / lead logs
 leads_log.csv

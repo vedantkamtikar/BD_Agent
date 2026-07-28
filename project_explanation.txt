@@ -1,0 +1,115 @@
+================================================================================
+           B2B LEAD-GENERATION AGENTIC WORKFLOW - TECH & CODE EXPLANATION
+================================================================================
+
+This document provides a detailed technical breakdown of the B2B Lead-Generation 
+Agent pipeline. The agent utilizes LangGraph to automate search grounding, contact 
+enrichment, dynamic routing, and data logging.
+
+--------------------------------------------------------------------------------
+1. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+- LangGraph: The agentic orchestration framework. It manages state persistence 
+  (checkpointing), node executions, and conditional edges (routing decision loops).
+- Gemini API (via langchain-google-genai): Used for web search grounding (real-time
+  searches connecting the LLM to Google Search), structured extraction, and 
+  outreach email copy drafting.
+- Pydantic (v2): Defines strict object schemas for validated data accumulation
+  (Company, Contact, EmailDraft models).
+- Tenacity: A robust retry utility with exponential backoff, configured to 
+  recover from Gemini's free-tier rate limits (15 Requests Per Minute).
+- Google Sheets API: Client API to append lead rows to a Google Spreadsheet.
+- python-dotenv: Loads local environment parameters from a '.env' file.
+
+--------------------------------------------------------------------------------
+2. PROJECT FILE STRUCTURE & FILE EXPLANATIONS
+--------------------------------------------------------------------------------
+
+- config.py
+  * Purpose: Loads environment variables and validates project configuration.
+  * Details: Loads GEMINI_API_KEY, GEMINI_MODEL, and MOCK_LLM from '.env'. It 
+    exposes a diagnostics check function 'check_config()' which warns if keys 
+    are missing and informs the user if the local CSV fallback is active.
+
+- models.py
+  * Purpose: Houses the project's Pydantic schemas.
+  * Details: Defines three critical data structures:
+    1. 'Company': website domain, name, industry category, description.
+    2. 'Contact': full name, job title, verified email, company name, domain.
+    3. 'EmailDraft': email recipient, subject line, customized email body text.
+    These Pydantic classes enforce validation checks and integrate with LLMs 
+    for structured parsing.
+
+- services/google_sheets.py
+  * Purpose: Manages lead logging (persistence phase).
+  * Details: Authenticates with Google Sheets API using service account 
+    credentials. If credentials or spreadsheet ID are missing, it automatically 
+    logs lead alignments locally to 'leads_log.csv'. It matches companies and 
+    contacts in a tabular layout, writing a single row per contact, or a 
+    skipped row if no contacts were found.
+
+- services/gemini.py
+  * Purpose: Handles LLM operations.
+  * Details: Configures two ChatGoogleGenerativeAI clients (one for grounding, 
+    one for parsing).
+    - 'search_companies': Invokes search grounding to find real companies, 
+      then uses Pydantic structured output mapping to load them into objects.
+    - 'get_contacts_for_company': Searches for executive contact details on 
+      the web.
+    - 'draft_outreach_email': Crafts personalized, short outreach emails.
+    - Local Mock Mode: Simulates all operations locally when 'MOCK_LLM=true' is 
+      active, bypassing network quota limits.
+
+- graph.py
+  * Purpose: Compiles the LangGraph state machine.
+  * Details: Definess the agent's nodes ('search_companies', 'get_contacts', 
+    'draft_emails') and edges. It registers the 'should_draft' router as a 
+    conditional edge after contact discovery. It also incorporates a 
+    'MemorySaver' checkpointer to persist thread history.
+
+- main.py
+  * Purpose: Entrypoint interactive CLI application.
+  * Details: Runs environment checks, accepts inputs interactively or via CLI 
+    arguments (e.g. --niche, --location, --limit), runs the graph in real-time, 
+    streams node changes, and runs the final logging handoff.
+
+- .env.example
+  * Purpose: Template configuration file detailing the required variables.
+
+- .gitignore
+  * Purpose: Configured to ignore python virtual environments, compiled files, 
+    the local '.env' secrets, and output CSV files.
+
+--------------------------------------------------------------------------------
+3. CORE AGENTIC CONCEPTS IMPLEMENTED
+--------------------------------------------------------------------------------
+
+A. REDUCERS (STATE ACCUMULATION)
+   In LangGraph, nodes write updates to a shared state dictionary. By default, 
+   writing updates overwrites existing keys. In 'graph.py', we annotate lists:
+   'companies: Annotated[List[Company], operator.add]'
+   The 'operator.add' reducer tells LangGraph to append discovered elements 
+   to the list instead of replacing it, accumulating companies and contacts 
+   across node iterations.
+
+B. SEARCH & STRUCTURE SEPARATION (TWO-STEP LLM CYCLE)
+   Gemini API does not allow combining search grounding tools with strict 
+   Pydantic structure validation in the same call.
+   We split this in 'services/gemini.py':
+   - Step 1: Query Gemini with Google Search tool enabled to return Markdown.
+   - Step 2: Use another Gemini instance with '.with_structured_output' to 
+     parse the Markdown report into Company or Contact models.
+
+C. CONDITIONAL ROUTING
+   Instead of running all nodes sequentially, the edge between 'get_contacts' 
+   and 'draft_emails' evaluates a routing function 'should_draft()'.
+   If contacts are found, the agent proceeds to 'draft_emails'. If no contacts 
+   were found, it routes directly to 'END', bypassing the drafting node and 
+   saving time/tokens.
+
+D. AGENT CHECKPOINTING & THREAD MEMORY
+   By compiling our graph with 'MemorySaver', the agent stores snapshot states 
+   indexed by a 'thread_id'. Passing a configuration block containing a unique 
+   thread_id allows the runner to resume the agent's work, inspect details, 
+   and manage thread persistence.
+================================================================================

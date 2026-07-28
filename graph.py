@@ -148,8 +148,6 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
 
 # -----------------------------------------------------------------------------
 # Graph Assembly
-# -----------------------------------------------------------------------------
-
 # Instantiate the state graph using the LeadState TypedDict
 builder = StateGraph(LeadState)
 
