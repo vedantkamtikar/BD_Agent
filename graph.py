@@ -19,6 +19,8 @@ class LeadState(TypedDict):
     target_niche: str
     location: str
     max_results: int
+    sender_name: str
+    sender_title: str
     companies: Annotated[List[Company], operator.add]
     contacts: Annotated[List[Contact], operator.add]
     emails: Annotated[List[EmailDraft], operator.add]
@@ -125,13 +127,16 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     contacts = state.get("contacts", [])
     email_drafts = []
     
+    sender_name = state.get("sender_name", "Alex")
+    sender_title = state.get("sender_title", "Lead Consultant")
+    
     # Map companies by name for fast lookup
     company_map = {company.name: company for company in companies}
     
     for contact in contacts:
         company = company_map.get(contact.company_name)
         if company:
-            draft = gemini_service.draft_outreach_email(company, contact)
+            draft = gemini_service.draft_outreach_email(company, contact, sender_name, sender_title)
             email_drafts.append(draft)
         else:
             print(f"[draft_emails] Warning: Could not find matching company '{contact.company_name}' in state.")

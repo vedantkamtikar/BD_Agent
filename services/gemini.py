@@ -4,10 +4,19 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
+import logging
+
+logger = logging.getLogger("GeminiService")
+logger.setLevel(logging.WARNING)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('[GeminiService] RETRY %(message)s'))
+    logger.addHandler(handler)
 
 import config
 from models import Company, Contact, EmailDraft
+from services.serper import SerperService
 
 
 def normalize_domain(url: str) -> str:
@@ -47,13 +56,15 @@ class GeminiService:
     structured schema parsing, and email drafting.
     """
     def __init__(self):
-        # Initialize Gemini LLM for search grounding (requires API key)
-        # Google search grounding tool works best with gemini-2.0-flash
-        self.llm_search = ChatGoogleGenerativeAI(
-            model=config.GEMINI_MODEL,
-            api_key=config.GEMINI_API_KEY or "PLACEHOLDER",
-            temperature=0.2
-        )
+        """
+        Initializes the Gemini LLM for structured output parsing
+        and the Serper service for web search.
+        """
+        # Initialize Serper web search service
+        if not config.MOCK_LLM:
+            self.serper = SerperService(api_key=config.SERPER_API_KEY)
+        else:
+            self.serper = None
         
         # Initialize Gemini LLM for structured output extraction and drafting
         self.llm_parse = ChatGoogleGenerativeAI(
@@ -62,7 +73,7 @@ class GeminiService:
             temperature=0.0
         )
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=5, max=60), reraise=True)
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
     def search_companies(self, niche: str, location: str, max_results: int = 5) -> List[Company]:
         """
         Step 1 (Search): Searches for real companies in the target niche/location using Google search grounding.
@@ -87,19 +98,8 @@ class GeminiService:
 
         print(f"[GeminiService] Step A: Searching web for {max_results} companies in '{niche}' located in '{location}'...")
         
-        search_prompt = (
-            f"Perform a search to find {max_results} real, active companies in the '{niche}' industry/niche "
-            f"located in '{location}'. For each company, find its official name, website domain/URL, "
-            f"industry category, and a short description of what they do. "
-            f"You must use Google Search to verify their actual existence and get their correct website domain."
-        )
-
-        # Enable Gemini native Google Search grounding tool
-        response = self.llm_search.invoke(
-            search_prompt,
-            tools=[{"google_search": {}}]
-        )
-        raw_markdown = response.content
+        search_query = f"{niche} companies in {location} official website"
+        raw_markdown = self.serper.search(search_query, num_results=max_results * 3)
 
         print("[GeminiService] Step B: Extracting structured company list from search output...")
         
@@ -107,27 +107,34 @@ class GeminiService:
         structured_llm = self.llm_parse.with_structured_output(CompanyList)
         
         parse_prompt = ChatPromptTemplate.from_template(
-            "You are an expert data extraction assistant. Parse the following web search report "
-            "about companies in the target niche into a clean list of structured company objects.\n\n"
-            "Web Search Report:\n{markdown}\n\n"
+            "You are an expert data extraction assistant. Parse the following web search results "
+            "about companies in the '{niche}' industry located in '{location}' into a clean list of "
+            "exactly {max_results} structured company objects.\n\n"
+            "Web Search Results:\n{markdown}\n\n"
             "Extract name, website/domain, industry, and description. For domains, extract the base website domain "
-            "(e.g., 'stripe.com' instead of 'https://www.stripe.com/us')."
+            "(e.g., 'stripe.com' instead of 'https://www.stripe.com/us'). "
+            "Only include real, currently active companies. Do not invent or fabricate entries."
         )
         
         parser_chain = parse_prompt | structured_llm
-        parsed_result: CompanyList = parser_chain.invoke({"markdown": raw_markdown})
+        parsed_result: CompanyList = parser_chain.invoke({
+            "markdown": raw_markdown,
+            "niche": niche,
+            "location": location,
+            "max_results": str(max_results)
+        })
         
         # Normalize domains post-extraction to guarantee clean matching
         normalized_companies = []
         for comp in parsed_result.companies:
             comp.domain = normalize_domain(comp.domain)
-            comp.source = f"Google Grounded Search ({niche} in {location})"
+            comp.source = f"Serper Search ({niche} in {location})"
             normalized_companies.append(comp)
             
         print(f"[GeminiService] Successfully discovered and structured {len(normalized_companies)} companies.")
         return normalized_companies
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=5, max=60), reraise=True)
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
     def get_contacts_for_company(self, company: Company, max_contacts: int = 2) -> List[Contact]:
         """
         Step 1 (Search): Searches for executive contacts at a company using Google search grounding.
@@ -160,38 +167,31 @@ class GeminiService:
 
         print(f"[GeminiService] Step A: Searching web for contacts at '{company.name}' (domain: {company.domain or 'unknown'})...")
         
-        search_prompt = (
-            f"Perform a web search to find up to {max_contacts} key contact persons (such as CEO, Founder, Co-Founder, "
-            f"VP of Sales, or Marketing Director) currently working at '{company.name}' (website/domain: {company.domain or 'unknown'}). "
-            f"For each contact, find their name, job title, and their professional/business email address. "
-            f"Use Google Search to verify their actual names and current roles at the company."
-        )
-
-        response = self.llm_search.invoke(
-            search_prompt,
-            tools=[{"google_search": {}}]
-        )
-        raw_markdown = response.content
+        search_query = f"{company.name} {company.domain or ''} CEO founder executives team leadership contact"
+        raw_markdown = self.serper.search(search_query, num_results=10)
 
         print(f"[GeminiService] Step B: Extracting structured contacts for '{company.name}'...")
         
         structured_llm = self.llm_parse.with_structured_output(ContactList)
         
         parse_prompt = ChatPromptTemplate.from_template(
-            "Parse the following web search report about contacts at the company '{company_name}' "
-            "into a clean list of structured contact objects.\n\n"
+            "Parse the following web search results about contacts at the company '{company_name}' "
+            "into a clean list of up to {max_contacts} structured contact objects.\n\n"
             "Company: {company_name}\n"
             "Company Domain: {company_domain}\n\n"
-            "Web Search Report:\n{markdown}\n\n"
+            "Web Search Results:\n{markdown}\n\n"
             "Extract name, title, and email. Ensure you populate 'company_name' as '{company_name}' "
-            "and 'company_domain' as '{company_domain}' for each contact. If email is not found, leave it as null."
+            "and 'company_domain' as '{company_domain}' for each contact. If email is not found, "
+            "construct a likely professional email using firstname.lastname@{company_domain} format. "
+            "Only include real people who actually work at this company."
         )
         
         parser_chain = parse_prompt | structured_llm
         parsed_result: ContactList = parser_chain.invoke({
             "markdown": raw_markdown,
             "company_name": company.name,
-            "company_domain": company.domain or ""
+            "company_domain": company.domain or "",
+            "max_contacts": str(max_contacts)
         })
         
         # Filter out contacts that have completely empty names or couldn't be parsed
@@ -199,8 +199,8 @@ class GeminiService:
         print(f"[GeminiService] Discovered {len(valid_contacts)} contacts at '{company.name}'.")
         return valid_contacts
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=5, max=60), reraise=True)
-    def draft_outreach_email(self, company: Company, contact: Contact) -> EmailDraft:
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
+    def draft_outreach_email(self, company: Company, contact: Contact, sender_name: str = "Alex", sender_title: str = "Lead Consultant") -> EmailDraft:
         """
         Drafts a highly personalized B2B cold outreach email targeting a specific contact
         at a target company, matching the EmailDraft schema.
@@ -210,13 +210,12 @@ class GeminiService:
             return EmailDraft(
                 contact_name=contact.name,
                 contact_email=contact.email or "unknown@email.com",
-                subject=f"Optimizing development at {company.name}",
+                subject=f"Executive Search / Talent Acquisition for {company.name}",
                 body=(
                     f"Hi {contact.name},\n\n"
-                    f"I came across {company.name} and noticed your work. As {contact.title or 'Executive'}, "
-                    f"I thought you'd want to know how we help teams like yours accelerate growth in the {company.industry or 'tech'} vertical.\n\n"
-                    f"Do you have 10 minutes for a brief call next Tuesday?\n\n"
-                    f"Best,\nAlex"
+                    f"I'm reaching out from Catenon, a global executive search firm. I noticed {company.name}'s recent work in the {company.industry or 'tech'} sector.\n\n"
+                    f"Given your role as {contact.title or 'Executive'}, I wanted to see if you have 10 minutes next Tuesday for a brief chat about your upcoming leadership/hiring needs.\n\n"
+                    f"Best,\n{sender_name}\n{sender_title}"
                 ),
                 company_name=company.name
             )
@@ -224,17 +223,14 @@ class GeminiService:
         print(f"[GeminiService] Drafting outreach email to '{contact.name}' ({contact.title or 'Executive'}) at '{company.name}'...")
         
         email_prompt = (
-            f"You are a professional B2B cold email copywriter. Write a highly personalized, friendly, and brief "
+            f"You are a professional B2B cold email copywriter. Write a highly personalized, extremely short, and direct "
             f"outreach email to {contact.name} ({contact.title or 'executive'}) at {company.name} (website: {company.domain or 'unknown'}).\n\n"
-            f"Use the company's description to customize your hook: {company.description or 'A business in the industry.'}\n\n"
+            f"The sender is {sender_name} ({sender_title}) from Catenon, a global executive search firm.\n\n"
             f"Guidelines:\n"
-            f"1. Subject line: Catchy, highly relevant, and professional. Do not use spam words.\n"
-            f"2. Email body: Keep it under 120 words. Open with a personalized observation about their business, "
-            f"briefly introduce our value (partner growth agency), and end with a direct, low-friction call-to-action "
-            f"(e.g., asking for a quick 10-minute chat next Tuesday).\n"
-            f"3. Style: Personal, warm, not sounding like an automated template.\n"
-            f"4. Do NOT use generic placeholders like [Your Name] or [My Company] for the sender info. "
-            f"Sign off simply as 'Alex, Lead Consultant' and do not include physical addresses.\n\n"
+            f"1. Subject line: Catchy, highly relevant, and professional. Mention Catenon or Executive Search/Talent Acquisition.\n"
+            f"2. Email body: Keep it very short, concise, and direct (under 80 words). State clearly that the sender is from Catenon (global executive search firm) and get straight to the point.\n"
+            f"3. Style: Professional, brief, direct.\n"
+            f"4. Sign off with '{sender_name}, {sender_title}' and do not include physical addresses.\n\n"
             f"The output must match the EmailDraft structured output schema."
         )
 

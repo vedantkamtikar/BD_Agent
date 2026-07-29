@@ -3,144 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lead-Gen Agent — B2B Pipeline Dashboard</title>
+    <title>Lead-Gen Agent — Autonomous B2B Prospecting</title>
     <meta name="description" content="Autonomous B2B lead mining, contact discovery, and outreach generation pipeline powered by LangGraph and Gemini.">
+    <!-- Google Fonts: Calistoga (Serif Display), Inter (Sans-serif UI), JetBrains Mono (Monospace Badges) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Calistoga&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-wrapper">
 
         <!-- ============================================
-             01. HEADER
+             01. HERO HEADER
              ============================================ -->
         <header class="app-header">
-            <p class="header-section-label">01. System</p>
-            <h1 class="header-title">Lead-Gen<br>Agent</h1>
-            <p class="header-subtitle">Autonomous lead mining, contact discovery, and personalised outreach generation</p>
+            <div class="header-inner">
+                <div class="section-pill">
+                    <span class="pulse-dot"></span>
+                    <span class="pill-text">01. SYSTEM</span>
+                </div>
+                <h1 class="hero-headline">
+                    B2B Lead-Gen <span class="gradient-text">Agent</span>
+                </h1>
+                <p class="hero-subtitle">
+                    Autonomous web-mining, executive contact discovery, and hyper-personalized Catenon outreach drafting.
+                </p>
+            </div>
+            <div class="header-actions">
+                <button class="theme-toggle-btn" id="theme-toggle" aria-label="Toggle light and dark theme">
+                    <span class="theme-icon sun-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    </span>
+                    <span class="theme-icon moon-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    </span>
+                    <span class="theme-label">Theme</span>
+                </button>
+            </div>
         </header>
 
         <!-- ============================================
-             MAIN GRID: Left Panel + Right Panel
+             MAIN GRID LAYOUT: Left (Control) + Right (Output)
              ============================================ -->
         <main class="app-main">
 
-            <!-- LEFT PANEL -->
-            <section class="control-panel">
+            <!-- LEFT CONTROL COLUMN -->
+            <section class="control-column">
 
-                <!-- 02. CONFIGURE -->
-                <div class="config-section">
-                    <div class="section-label">
-                        <span class="label-num">02.</span> Configure
+                <!-- 02. CONFIGURE CARD -->
+                <div class="card-elevated config-card">
+                    <div class="card-header-row">
+                        <div class="section-pill">
+                            <span class="pill-dot"></span>
+                            <span class="pill-text">02. CONFIGURE</span>
+                        </div>
                     </div>
-                    <h2 class="config-title">Launch Pipeline</h2>
+                    <h2 class="card-title">Launch Pipeline</h2>
+                    <p class="card-desc">Define your target industry niche, location parameters, and sender identity.</p>
 
                     <form id="run-form" autocomplete="off">
                         <div class="form-group">
                             <label class="form-label" for="niche">Target Industry / Niche</label>
-                            <input class="form-input" type="text" id="niche" placeholder="DevOps consulting agencies" required>
+                            <input class="form-input" type="text" id="niche" placeholder="e.g. Fintech startups, DevOps consultancies" required>
                         </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="sender-name">Your Name</label>
+                                <input class="form-input" type="text" id="sender-name" placeholder="Alex" value="Alex" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="sender-title">Your Designation</label>
+                                <input class="form-input" type="text" id="sender-title" placeholder="Lead Consultant" value="Lead Consultant" required>
+                            </div>
+                        </div>
+
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label" for="location">Location</label>
-                                <input class="form-input" type="text" id="location" value="United States">
+                                <input class="form-input" type="text" id="location" value="United States" required>
                             </div>
                             <div class="form-group">
                                 <label class="form-label" for="limit">Limit</label>
-                                <input class="form-input" type="number" id="limit" min="1" max="10" value="3">
+                                <input class="form-input" type="number" id="limit" min="1" max="10" value="3" required>
                             </div>
                         </div>
+
                         <button type="submit" class="btn-primary" id="submit-btn">
                             <span class="btn-label">Execute Pipeline</span>
+                            <span class="btn-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                            </span>
                             <span class="spinner"></span>
                         </button>
                     </form>
                 </div>
 
-                <!-- 03. MONITOR -->
-                <div class="monitor-section swiss-dots">
-                    <div class="section-label">
-                        <span class="label-num">03.</span> Monitor
-                    </div>
-                    <div class="monitor-header">
-                        <h2 class="monitor-title">Agent Status</h2>
+                <!-- 03. MONITOR (INVERTED DARK SECTION) -->
+                <div class="card-dark monitor-card">
+                    <div class="monitor-top-bar">
+                        <div class="section-pill pill-dark">
+                            <span class="pulse-dot pulse-blue"></span>
+                            <span class="pill-text">03. MONITOR</span>
+                        </div>
                         <div class="status-badge idle" id="status-badge">
                             <span class="status-dot"></span>
                             <span class="status-text">Idle</span>
                         </div>
                     </div>
 
-                    <div class="thread-row">
-                        <span>Thread</span>
-                        <code id="active-thread-id">&mdash;</code>
+                    <div class="thread-info-row">
+                        <span class="thread-label">Thread ID</span>
+                        <code class="thread-code" id="active-thread-id">&mdash;</code>
                     </div>
 
                     <!-- Pipeline Steps -->
                     <div class="pipeline-steps">
                         <div class="pipeline-step" id="step-search">
-                            <span class="step-marker"></span>
-                            <span>search_companies</span>
+                            <span class="step-num">01</span>
+                            <span class="step-name">search_companies</span>
                         </div>
                         <div class="pipeline-step" id="step-contacts">
-                            <span class="step-marker"></span>
-                            <span>get_contacts</span>
+                            <span class="step-num">02</span>
+                            <span class="step-name">get_contacts</span>
                         </div>
                         <div class="pipeline-step" id="step-draft">
-                            <span class="step-marker"></span>
-                            <span>draft_emails</span>
+                            <span class="step-num">03</span>
+                            <span class="step-name">draft_emails</span>
                         </div>
                     </div>
 
-                    <div class="console-box swiss-grid-pattern" id="console-logs">
-                        <div class="console-placeholder">Awaiting execution...</div>
+                    <!-- Log Console -->
+                    <div class="console-box" id="console-logs">
+                        <div class="console-placeholder">Awaiting pipeline execution...</div>
                     </div>
                 </div>
 
             </section>
 
-            <!-- RIGHT PANEL — OUTPUT -->
-            <section class="output-section">
-                <div class="section-label">
-                    <span class="label-num">04.</span> Output
-                </div>
-                <div class="output-header">
-                    <div>
-                        <h2 class="output-title">Lead Sheet</h2>
-                        <p class="output-count" id="lead-count-label">No records</p>
+            <!-- RIGHT OUTPUT COLUMN -->
+            <section class="output-column">
+                <div class="card-elevated output-card">
+                    <div class="output-header">
+                        <div>
+                            <div class="section-pill">
+                                <span class="pill-dot"></span>
+                                <span class="pill-text">04. OUTPUT</span>
+                            </div>
+                            <h2 class="card-title">Discovered Leads</h2>
+                            <p class="output-count" id="lead-count-label">No records</p>
+                        </div>
+                        <button class="btn-outline" id="download-btn" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Export CSV
+                        </button>
                     </div>
-                    <button class="btn-outline" id="download-btn" disabled>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        Download CSV
-                    </button>
-                </div>
 
-                <div class="table-container">
-                    <table id="leads-table">
-                        <thead>
-                            <tr>
-                                <th>Company</th>
-                                <th>Domain</th>
-                                <th>Industry</th>
-                                <th>Description</th>
-                                <th>Contact</th>
-                                <th>Title</th>
-                                <th>Email</th>
-                                <th>Outreach</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leads-tbody">
-                            <tr>
-                                <td colspan="8" class="empty-state">
-                                    <span class="empty-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                    </span>
-                                    No records. Execute the pipeline to populate.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="table-wrap">
+                        <table id="leads-table">
+                            <thead>
+                                <tr>
+                                    <th>Company</th>
+                                    <th>Domain</th>
+                                    <th>Industry</th>
+                                    <th>Description</th>
+                                    <th>Contact</th>
+                                    <th>Title</th>
+                                    <th>Email</th>
+                                    <th>Outreach</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leads-tbody">
+                                <tr>
+                                    <td colspan="8" class="empty-state">
+                                        <div class="empty-content">
+                                            <span class="empty-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                            </span>
+                                            <p>No records found yet. Configure parameters and run the pipeline to discover leads.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
@@ -148,38 +195,48 @@
     </div>
 
     <!-- ============================================
-         EMAIL DRAFT MODAL
+         EMAIL OUTREACH MODAL
          ============================================ -->
     <div class="modal-overlay" id="email-modal" role="dialog" aria-modal="true" aria-label="Email draft preview">
         <div class="modal-backdrop" id="modal-backdrop"></div>
-        <div class="modal-box">
-            <div class="modal-head">
+        <div class="modal-card">
+            <div class="modal-header">
                 <div>
-                    <p class="modal-head-title">Outreach Copy</p>
-                    <p class="modal-head-sub">Review and copy the generated draft</p>
+                    <div class="section-pill">
+                        <span class="pill-dot"></span>
+                        <span class="pill-text">CATENON OUTREACH DRAFT</span>
+                    </div>
+                    <h3 class="modal-title">Generated Email Copy</h3>
                 </div>
-                <button class="modal-close" id="modal-close-btn" aria-label="Close">
+                <button class="modal-close" id="modal-close-btn" aria-label="Close modal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
+
             <div class="modal-body">
-                <div class="email-meta">
-                    <div class="email-meta-row">
-                        <span class="meta-key">To</span>
+                <div class="email-meta-grid">
+                    <div class="email-meta-item">
+                        <span class="meta-label">TO</span>
                         <span class="meta-val" id="modal-email-to"></span>
                     </div>
-                    <div class="email-meta-row">
-                        <span class="meta-key">Subject</span>
-                        <span class="meta-val" id="modal-email-subject"></span>
+                    <div class="email-meta-item">
+                        <span class="meta-label">SUBJECT</span>
+                        <span class="meta-val subject-highlight" id="modal-email-subject"></span>
                     </div>
                 </div>
-                <div class="email-body-wrap swiss-diagonal">
+                <div class="email-content-box">
                     <pre class="email-body-text" id="modal-email-body"></pre>
                 </div>
             </div>
-            <div class="modal-foot">
-                <button class="btn-outline" id="modal-cancel-btn">Cancel</button>
-                <button class="btn-primary" id="copy-email-btn">Copy to Clipboard</button>
+
+            <div class="modal-footer">
+                <button class="btn-secondary" id="modal-cancel-btn">Close</button>
+                <button class="btn-primary" id="copy-email-btn">
+                    <span class="btn-label">Copy Draft</span>
+                    <span class="btn-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </span>
+                </button>
             </div>
         </div>
     </div>

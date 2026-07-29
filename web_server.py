@@ -30,14 +30,18 @@ class RunRequest(BaseModel):
     niche: str
     location: str = "United States"
     limit: int = 3
+    sender_name: str = "Alex"
+    sender_title: str = "Lead Consultant"
 
 
-def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int):
+def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, sender_name: str, sender_title: str):
     """Executes the LangGraph agent on a background thread."""
     initial_state = {
         "target_niche": niche,
         "location": location,
         "max_results": limit,
+        "sender_name": sender_name,
+        "sender_title": sender_title,
         "companies": [],
         "contacts": [],
         "emails": [],
@@ -79,22 +83,78 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int):
                             for line in val:
                                 db["logs"].append(f"[{ts}] {line}")
 
-        # Persist results
+        # Convert accumulated dicts back to Pydantic objects
         companies_obj = [PydanticCompany(**c) for c in runs_db[thread_id]["companies"]]
         contacts_obj = [PydanticContact(**c) for c in runs_db[thread_id]["contacts"]]
         emails_obj = [PydanticEmailDraft(**e) for e in runs_db[thread_id]["emails"]]
 
+        # Persist to Google Sheets
         with runs_lock:
             runs_db[thread_id]["logs"].append(
-                f"[{datetime.now().strftime('%H:%M:%S')}] Writing leads to persistence layer..."
+                f"[{datetime.now().strftime('%H:%M:%S')}] Writing leads to Google Sheets..."
             )
 
-        logger = LeadLogger()
-        logger.log_leads(companies_obj, contacts_obj, emails_obj)
+        try:
+            logger = LeadLogger()
+            logger.log_leads(companies_obj, contacts_obj, emails_obj)
+        except Exception as sheets_err:
+            with runs_lock:
+                runs_db[thread_id]["logs"].append(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] Sheets warning: {sheets_err}"
+                )
+
+        # Deduplicate companies by domain
+        seen_domains = set()
+        unique_companies = []
+        for comp in companies_obj:
+            key = (comp.domain or comp.name).lower()
+            if key not in seen_domains:
+                seen_domains.add(key)
+                unique_companies.append(comp)
+        companies_obj = unique_companies
+
+        # Build formatted lead rows for the frontend table
+        lead_rows = []
+        contacts_by_company = {}
+        for c in contacts_obj:
+            contacts_by_company.setdefault(c.company_name, []).append(c)
+        emails_by_contact = {}
+        for e in emails_obj:
+            emails_by_contact[e.contact_email] = e
+
+        for comp in companies_obj:
+            comp_contacts = contacts_by_company.get(comp.name, [])
+            if not comp_contacts:
+                lead_rows.append({
+                    "Company Name": comp.name,
+                    "Company Domain": comp.domain or "N/A",
+                    "Industry": comp.industry or "N/A",
+                    "Company Description": comp.description or "N/A",
+                    "Contact Name": "N/A (No contacts found)",
+                    "Contact Title": "N/A",
+                    "Contact Email": "N/A",
+                    "Email Subject": "N/A (Email drafting skipped)",
+                    "Email Body": "N/A"
+                })
+            else:
+                for contact in comp_contacts:
+                    draft = emails_by_contact.get(contact.email)
+                    lead_rows.append({
+                        "Company Name": comp.name,
+                        "Company Domain": comp.domain or "N/A",
+                        "Industry": comp.industry or "N/A",
+                        "Company Description": comp.description or "N/A",
+                        "Contact Name": contact.name,
+                        "Contact Title": contact.title or "N/A",
+                        "Contact Email": contact.email or "N/A",
+                        "Email Subject": draft.subject if draft else "N/A (No draft generated)",
+                        "Email Body": draft.body if draft else "N/A"
+                    })
 
         with runs_lock:
             db = runs_db[thread_id]
             db["status"] = "completed"
+            db["lead_rows"] = lead_rows
             db["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Pipeline completed successfully.")
 
     except Exception as e:
@@ -104,19 +164,6 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int):
             db["error"] = str(e)
             db["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Fatal error: {str(e)}")
 
-
-def read_csv_leads() -> List[Dict[str, str]]:
-    """Reads leads_log.csv as a list of dicts."""
-    if not os.path.exists("leads_log.csv"):
-        return []
-    leads = []
-    try:
-        with open("leads_log.csv", mode="r", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                leads.append(row)
-    except Exception as e:
-        print(f"[API] Error reading leads_log.csv: {e}")
-    return leads
 
 
 # --- Routes ---
@@ -139,7 +186,9 @@ def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
         thread_id=thread_id,
         niche=request.niche,
         location=request.location,
-        limit=request.limit
+        limit=request.limit,
+        sender_name=request.sender_name,
+        sender_title=request.sender_title
     )
     return {"thread_id": thread_id, "status": "started"}
 
@@ -154,7 +203,13 @@ def get_status(thread_id: str):
 
 @app.get("/api/leads")
 def get_leads():
-    return {"leads": read_csv_leads()}
+    """Returns leads from the most recent completed run."""
+    with runs_lock:
+        latest_leads = []
+        for tid, run in runs_db.items():
+            if run.get("status") == "completed" and run.get("lead_rows"):
+                latest_leads = run["lead_rows"]
+        return {"leads": latest_leads}
 
 
 @app.get("/api/download")

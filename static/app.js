@@ -27,8 +27,30 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalBody    = document.getElementById("modal-email-body");
     const copyBtn      = document.getElementById("copy-email-btn");
 
-    let pollId = null;
-    let logCount = 0;
+    const themeToggle  = document.getElementById("theme-toggle");
+
+    // Initialize Theme (Light / Dark)
+    initTheme();
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+            const newTheme = currentTheme === "dark" ? "light" : "dark";
+            document.documentElement.setAttribute("data-theme", newTheme);
+            localStorage.setItem("theme-preference", newTheme);
+        });
+    }
+
+    function initTheme() {
+        const savedTheme = localStorage.getItem("theme-preference");
+        if (savedTheme) {
+            document.documentElement.setAttribute("data-theme", savedTheme);
+        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            document.documentElement.setAttribute("data-theme", "dark");
+        } else {
+            document.documentElement.setAttribute("data-theme", "light");
+        }
+    }
 
     // Load existing leads on init
     loadLeads();
@@ -42,6 +64,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const niche    = document.getElementById("niche").value.trim();
         const location = document.getElementById("location").value.trim();
         const limit    = parseInt(document.getElementById("limit").value, 10);
+        const senderName = document.getElementById("sender-name").value.trim();
+        const senderTitle = document.getElementById("sender-title").value.trim();
         if (!niche) return;
 
         setLoading(true);
@@ -54,7 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/run", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ niche, location, limit })
+                body: JSON.stringify({ niche, location, limit, sender_name: senderName, sender_title: senderTitle })
             });
             if (!res.ok) throw new Error("Failed to start pipeline.");
             const data = await res.json();
@@ -101,7 +125,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     setBadge("completed");
                     setLoading(false);
                     doneAllSteps();
-                    loadLeads();
+                    // Load leads from the completed run
+                    if (data.lead_rows && data.lead_rows.length) {
+                        renderTable(data.lead_rows);
+                    } else {
+                        loadLeads();
+                    }
                 } else if (data.status === "failed") {
                     clearInterval(pollId);
                     setBadge("failed");
@@ -212,7 +241,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     downloadBtn.addEventListener("click", () => {
-        window.location.href = "/api/download";
+        // Export current table data as CSV client-side
+        const rows = document.querySelectorAll("#leads-tbody tr");
+        if (!rows.length) return;
+        const headers = ["Company Name", "Company Domain", "Industry", "Company Description", "Contact Name", "Contact Title", "Contact Email"];
+        let csv = headers.join(",") + "\n";
+        rows.forEach(tr => {
+            const cells = tr.querySelectorAll("td");
+            if (cells.length < 7) return;
+            const vals = Array.from(cells).slice(0, 7).map(td => {
+                const text = td.textContent.trim().replace(/"/g, '""');
+                return `"${text}"`;
+            });
+            csv += vals.join(",") + "\n";
+        });
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "leads_export.csv";
+        a.click();
+        URL.revokeObjectURL(url);
     });
 
     // -------------------------------------------------------

@@ -2,12 +2,15 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # Gemini API configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 MOCK_LLM = os.getenv("MOCK_LLM", "false").lower() == "true"
+
+# Serper API configuration (web search)
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 # Google Sheets API configuration
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
@@ -40,10 +43,14 @@ def check_config() -> bool:
             print("        -> Or set MOCK_LLM=true to run without a real key.")
             has_critical_error = True
         else:
-            if GEMINI_API_KEY.startswith("AQ."):
-                print("[WARN] GEMINI_API_KEY format matches a temporary token (starts with AQ.).")
-                print("       -> It may have expired. If you see 401 errors, set MOCK_LLM=true in '.env'.")
             print("[OK] GEMINI_API_KEY is configured.")
+
+        if not SERPER_API_KEY:
+            print("[ERROR] SERPER_API_KEY is not set.")
+            print("        -> Get a free key at https://serper.dev and add it to '.env'.")
+            has_critical_error = True
+        else:
+            print("[OK] SERPER_API_KEY is configured (Serper.dev web search).")
 
     # Check Google Sheets Logging
     if not GOOGLE_SHEET_ID or not GOOGLE_APPLICATION_CREDENTIALS:
