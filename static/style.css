@@ -49,7 +49,7 @@
     --foreground: #F8FAFC; /* Slate-50 */
     --muted: #1E293B; /* Slate-800 */
     --muted-foreground: #94A3B8; /* Slate-400 */
-    --accent: #2563EB;
+    --accent: #3B82F6;
     --accent-secondary: #60A5FA;
     --accent-foreground: #FFFFFF;
     --border: #1E293B;
@@ -109,6 +109,31 @@ body {
     max-width: 760px;
 }
 
+.hero-headline {
+    font-family: var(--font-display);
+    font-size: 3.5rem;
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
+    margin: 0.75rem 0 0.75rem 0;
+}
+
+.gradient-text {
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    display: inline-block;
+}
+
+.hero-subtitle {
+    font-size: 1.125rem;
+    color: var(--muted-foreground);
+    font-weight: 400;
+    line-height: 1.6;
+}
+
 /* Theme Toggle Button */
 .theme-toggle-btn {
     display: inline-flex;
@@ -150,31 +175,6 @@ body {
 [data-theme="dark"] .sun-icon { display: none; }
 [data-theme="dark"] .moon-icon { display: flex; }
 
-.hero-headline {
-    font-family: var(--font-display);
-    font-size: 3.5rem;
-    font-weight: 400;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    color: var(--foreground);
-    margin: 0.75rem 0 0.75rem 0;
-}
-
-.gradient-text {
-    background: var(--accent-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    display: inline-block;
-}
-
-.hero-subtitle {
-    font-size: 1.125rem;
-    color: var(--muted-foreground);
-    font-weight: 400;
-    line-height: 1.6;
-}
-
 /* ==========================================================================
    SECTION PILL BADGES
    ========================================================================== */
@@ -186,6 +186,11 @@ body {
     background: rgba(0, 82, 255, 0.06);
     border: 1px solid rgba(0, 82, 255, 0.2);
     border-radius: var(--radius-full);
+}
+
+[data-theme="dark"] .section-pill {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
 }
 
 .pill-dot {
@@ -205,12 +210,12 @@ body {
 }
 
 .pill-dark {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 .pill-dark .pill-text {
-    color: #93C5FD;
+    color: #93C5FD !important;
 }
 
 /* Animated Pulsing Dots */
@@ -273,7 +278,7 @@ body {
     border-radius: var(--radius-lg);
     padding: 1.75rem;
     box-shadow: var(--shadow-md);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .card-elevated:hover {
@@ -323,13 +328,13 @@ body {
     width: 100%;
     height: 44px;
     padding: 0 1rem;
-    background-color: #FFFFFF;
+    background-color: var(--input-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     font-family: var(--font-sans);
     font-size: 0.9rem;
     color: var(--foreground);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.3s ease;
 }
 
 .form-input:focus {
@@ -339,7 +344,7 @@ body {
 }
 
 .form-input::placeholder {
-    color: #94A3B8;
+    color: var(--muted-foreground);
 }
 
 /* Primary Button */
@@ -466,14 +471,14 @@ body {
 }
 
 .btn-secondary:hover {
-    background-color: #E2E8F0;
+    background-color: var(--border);
 }
 
 /* ==========================================================================
    03. MONITOR (INVERTED DARK CARD)
    ========================================================================== */
 .card-dark {
-    background-color: #0F172A; /* Slate-900 */
+    background-color: #0F172A; /* Slate-900 Always Dark */
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
     padding: 1.5rem;
@@ -693,7 +698,7 @@ body {
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    background: #FFFFFF;
+    background: var(--card);
 }
 
 #leads-table {
@@ -704,7 +709,7 @@ body {
 }
 
 #leads-table th {
-    background-color: var(--muted);
+    background-color: var(--table-header-bg);
     color: var(--foreground);
     font-family: var(--font-mono);
     font-size: 0.75rem;
@@ -728,7 +733,7 @@ body {
 }
 
 #leads-table tbody tr:hover {
-    background-color: rgba(0, 82, 255, 0.02);
+    background-color: rgba(0, 82, 255, 0.04);
 }
 
 #leads-table tbody tr:last-child td {
@@ -782,11 +787,11 @@ body {
 .empty-icon svg {
     width: 42px;
     height: 42px;
-    stroke: #94A3B8;
+    stroke: var(--muted-foreground);
 }
 
 .text-muted {
-    color: #94A3B8;
+    color: var(--muted-foreground);
 }
 
 /* ==========================================================================
@@ -813,7 +818,7 @@ body {
 .modal-backdrop {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15, 23, 42, 0.6);
+    background: rgba(15, 23, 42, 0.7);
     backdrop-filter: blur(4px);
 }
 
@@ -822,7 +827,7 @@ body {
     z-index: 10;
     width: 100%;
     max-width: 620px;
-    background: #FFFFFF;
+    background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-xl);
@@ -865,7 +870,7 @@ body {
 }
 
 .modal-close:hover {
-    background: #E2E8F0;
+    background: var(--border);
 }
 
 .modal-close svg {
@@ -913,7 +918,7 @@ body {
 }
 
 .email-content-box {
-    background: #FAFAFA;
+    background: var(--background);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 1.25rem;
@@ -925,7 +930,7 @@ body {
     font-family: var(--font-sans);
     font-size: 0.9rem;
     line-height: 1.65;
-    color: #334155;
+    color: var(--foreground);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -956,6 +961,9 @@ body {
     body {
         padding: 1.5rem 1rem;
     }
+    .app-header {
+        flex-direction: column;
+    }
     .hero-headline {
         font-size: 2.25rem;
     }
@@ -968,3 +976,34 @@ body {
         gap: 0.75rem;
     }
 }
+
+/* Progress Bar Component */
+.progress-bar-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.75rem 0 1rem 0;
+}
+
+.progress-bar-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-gradient);
+    border-radius: 999px;
+    transition: width 0.4s ease-out;
+}
+
+.progress-label {
+    font-size: 0.8125rem;
+    font-family: var(--font-mono);
+    color: #94A3B8;
+}
+

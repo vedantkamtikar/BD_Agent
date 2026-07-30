@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Calistoga&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body>
     <div class="app-wrapper">
@@ -19,10 +19,7 @@
              ============================================ -->
         <header class="app-header">
             <div class="header-inner">
-                <div class="section-pill">
-                    <span class="pulse-dot"></span>
-                    <span class="pill-text">01. SYSTEM</span>
-                </div>
+
                 <h1 class="hero-headline">
                     B2B Lead-Gen <span class="gradient-text">Agent</span>
                 </h1>
@@ -53,12 +50,7 @@
 
                 <!-- 02. CONFIGURE CARD -->
                 <div class="card-elevated config-card">
-                    <div class="card-header-row">
-                        <div class="section-pill">
-                            <span class="pill-dot"></span>
-                            <span class="pill-text">02. CONFIGURE</span>
-                        </div>
-                    </div>
+
                     <h2 class="card-title">Launch Pipeline</h2>
                     <p class="card-desc">Define your target industry niche, location parameters, and sender identity.</p>
 
@@ -82,12 +74,32 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label" for="location">Location</label>
-                                <input class="form-input" type="text" id="location" value="United States" required>
+                                <input class="form-input" type="text" id="location" placeholder="e.g. India, Pune, Mumbai" value="India" required>
                             </div>
                             <div class="form-group">
-                                <label class="form-label" for="limit">Limit</label>
+                                <label class="form-label" for="limit">Limit (Max Companies)</label>
                                 <input class="form-input" type="number" id="limit" min="1" max="10" value="3" required>
                             </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="min-revenue">Min Revenue</label>
+                                <input class="form-input" type="text" id="min-revenue" placeholder="e.g. ₹10 Cr (Optional)">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="max-revenue">Max Revenue</label>
+                                <input class="form-input" type="text" id="max-revenue" placeholder="e.g. ₹100 Cr (Optional)">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="outreach-tone">Outreach Tone</label>
+                            <select class="form-input" id="outreach-tone">
+                                <option value="formal" selected>Formal</option>
+                                <option value="conversational">Conversational</option>
+                                <option value="bold">Bold</option>
+                            </select>
                         </div>
 
                         <button type="submit" class="btn-primary" id="submit-btn">
@@ -103,10 +115,7 @@
                 <!-- 03. MONITOR (INVERTED DARK SECTION) -->
                 <div class="card-dark monitor-card">
                     <div class="monitor-top-bar">
-                        <div class="section-pill pill-dark">
-                            <span class="pulse-dot pulse-blue"></span>
-                            <span class="pill-text">03. MONITOR</span>
-                        </div>
+                        <div></div>
                         <div class="status-badge idle" id="status-badge">
                             <span class="status-dot"></span>
                             <span class="status-text">Idle</span>
@@ -134,6 +143,14 @@
                         </div>
                     </div>
 
+                    <!-- Progress Bar -->
+                    <div class="progress-bar-wrap" id="progress-wrap" style="display: none;">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="progress-fill"></div>
+                        </div>
+                        <span class="progress-label" id="progress-label">Initializing...</span>
+                    </div>
+
                     <!-- Log Console -->
                     <div class="console-box" id="console-logs">
                         <div class="console-placeholder">Awaiting pipeline execution...</div>
@@ -147,10 +164,7 @@
                 <div class="card-elevated output-card">
                     <div class="output-header">
                         <div>
-                            <div class="section-pill">
-                                <span class="pill-dot"></span>
-                                <span class="pill-text">04. OUTPUT</span>
-                            </div>
+
                             <h2 class="card-title">Discovered Leads</h2>
                             <p class="output-count" id="lead-count-label">No records</p>
                         </div>
@@ -168,6 +182,9 @@
                                     <th>Domain</th>
                                     <th>Industry</th>
                                     <th>Description</th>
+                                    <th>Employees</th>
+                                    <th>Founded</th>
+                                    <th>HQ</th>
                                     <th>Contact</th>
                                     <th>Title</th>
                                     <th>Email</th>
@@ -176,7 +193,7 @@
                             </thead>
                             <tbody id="leads-tbody">
                                 <tr>
-                                    <td colspan="8" class="empty-state">
+                                    <td colspan="11" class="empty-state">
                                         <div class="empty-content">
                                             <span class="empty-icon">
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -241,6 +258,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=3"></script>
 </body>
 </html>

@@ -19,8 +19,11 @@ class LeadState(TypedDict):
     target_niche: str
     location: str
     max_results: int
+    min_revenue: str
+    max_revenue: str
     sender_name: str
     sender_title: str
+    tone: str
     companies: Annotated[List[Company], operator.add]
     contacts: Annotated[List[Contact], operator.add]
     emails: Annotated[List[EmailDraft], operator.add]
@@ -38,13 +41,20 @@ def search_companies_node(state: LeadState) -> Dict[str, Any]:
     print("=" * 60)
     
     niche = state.get("target_niche")
-    location = state.get("location", "United States")
+    location = state.get("location", "India")
     max_results = state.get("max_results", 5)
+    min_revenue = state.get("min_revenue", "")
+    max_revenue = state.get("max_revenue", "")
     
     # Discover companies
-    companies = gemini_service.search_companies(niche, location, max_results)
+    companies = gemini_service.search_companies(niche, location, max_results, min_revenue, max_revenue)
     
-    log_msg = f"search_companies: Found {len(companies)} companies in '{niche}' ({location})."
+    rev_parts = []
+    if min_revenue: rev_parts.append(f"Min: {min_revenue}")
+    if max_revenue: rev_parts.append(f"Max: {max_revenue}")
+    revenue_info = f" (Revenue Range: {', '.join(rev_parts)})" if rev_parts else ""
+    
+    log_msg = f"search_companies: Found {len(companies)} companies in '{niche}' ({location}){revenue_info}."
     print(f"\n[NODE] EXITING: search_companies -> {log_msg}")
     print("=" * 60 + "\n")
     
@@ -73,10 +83,13 @@ def get_contacts_node(state: LeadState) -> Dict[str, Any]:
         print("=" * 60 + "\n")
         return {"contacts": [], "logs": [log_msg]}
         
-    print(f"[get_contacts] Searching contacts for {len(companies)} companies...")
-    for company in companies:
-        contacts = gemini_service.get_contacts_for_company(company)
-        all_contacts.extend(contacts)
+    total = len(companies)
+    print(f"[get_contacts] Searching contacts for {total} companies...")
+    for idx, company in enumerate(companies, 1):
+        print(f"[get_contacts] [{idx}/{total}] Searching contacts at '{company.name}'...")
+        contacts = gemini_service.get_contacts_for_company(company, max_contacts=1)
+        if contacts:
+            all_contacts.append(contacts[0])
         
     log_msg = f"get_contacts: Discovered {len(all_contacts)} contacts total."
     print(f"\n[NODE] EXITING: get_contacts -> {log_msg}")
@@ -84,7 +97,7 @@ def get_contacts_node(state: LeadState) -> Dict[str, Any]:
     
     return {
         "contacts": all_contacts,
-        "logs": [log_msg]
+        "logs": [f"[PROGRESS] get_contacts: {idx}/{total}" for idx in range(1, total + 1)] + [log_msg]
     }
 
 
@@ -129,14 +142,17 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     
     sender_name = state.get("sender_name", "Alex")
     sender_title = state.get("sender_title", "Lead Consultant")
+    tone = state.get("tone", "formal")
     
     # Map companies by name for fast lookup
     company_map = {company.name: company for company in companies}
+    total = len(contacts)
     
-    for contact in contacts:
+    for idx, contact in enumerate(contacts, 1):
         company = company_map.get(contact.company_name)
         if company:
-            draft = gemini_service.draft_outreach_email(company, contact, sender_name, sender_title)
+            print(f"[draft_emails] [{idx}/{total}] Drafting email for '{contact.name}' at '{company.name}'...")
+            draft = gemini_service.draft_outreach_email(company, contact, sender_name, sender_title, tone)
             email_drafts.append(draft)
         else:
             print(f"[draft_emails] Warning: Could not find matching company '{contact.company_name}' in state.")
@@ -147,7 +163,7 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     
     return {
         "emails": email_drafts,
-        "logs": [log_msg]
+        "logs": [f"[PROGRESS] draft_emails: {idx}/{total}" for idx in range(1, total + 1)] + [log_msg]
     }
 
 

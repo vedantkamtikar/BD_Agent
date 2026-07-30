@@ -32,7 +32,7 @@ BD_Agent/
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Local Installation & Setup
 
 1. **Verify Python & Virtual Environment**:
    The virtual environment is pre-configured with Python 3.13 in the `bd_agent` folder.

@@ -11,6 +11,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const downloadBtn   = document.getElementById("download-btn");
     const countLabel    = document.getElementById("lead-count-label");
 
+    // Progress bar
+    const progressWrap  = document.getElementById("progress-wrap");
+    const progressFill  = document.getElementById("progress-fill");
+    const progressLabel = document.getElementById("progress-label");
+
     // Pipeline steps
     const stepSearch   = document.getElementById("step-search");
     const stepContacts = document.getElementById("step-contacts");
@@ -28,6 +33,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const copyBtn      = document.getElementById("copy-email-btn");
 
     const themeToggle  = document.getElementById("theme-toggle");
+
+    let pollId = null;
+    let logCount = 0;
 
     // Initialize Theme (Light / Dark)
     initTheme();
@@ -61,24 +69,37 @@ document.addEventListener("DOMContentLoaded", () => {
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const niche    = document.getElementById("niche").value.trim();
-        const location = document.getElementById("location").value.trim();
-        const limit    = parseInt(document.getElementById("limit").value, 10);
+        const niche      = document.getElementById("niche").value.trim();
+        const location   = document.getElementById("location").value.trim();
+        const limit      = parseInt(document.getElementById("limit").value, 10);
+        const minRevenue = (document.getElementById("min-revenue")?.value || "").trim();
+        const maxRevenue = (document.getElementById("max-revenue")?.value || "").trim();
         const senderName = document.getElementById("sender-name").value.trim();
         const senderTitle = document.getElementById("sender-title").value.trim();
+        const tone       = document.getElementById("outreach-tone").value;
         if (!niche) return;
 
         setLoading(true);
         setBadge("running");
         clearConsole();
         resetSteps();
+        resetProgress();
         logCount = 0;
 
         try {
             const res = await fetch("/api/run", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ niche, location, limit, sender_name: senderName, sender_title: senderTitle })
+                body: JSON.stringify({
+                    niche,
+                    location,
+                    limit,
+                    min_revenue: minRevenue,
+                    max_revenue: maxRevenue,
+                    sender_name: senderName,
+                    sender_title: senderTitle,
+                    tone
+                })
             });
             if (!res.ok) throw new Error("Failed to start pipeline.");
             const data = await res.json();
@@ -119,12 +140,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Pipeline step visuals
                 updateSteps(data.logs || []);
 
+                // Progress bar update
+                if (data.progress) {
+                    updateProgress(data.progress);
+                }
+
                 // Terminal states
                 if (data.status === "completed") {
                     clearInterval(pollId);
                     setBadge("completed");
                     setLoading(false);
                     doneAllSteps();
+                    completeProgress();
                     // Load leads from the completed run
                     if (data.lead_rows && data.lead_rows.length) {
                         renderTable(data.lead_rows);
@@ -159,7 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderTable(leads) {
         if (!leads.length) {
-            tbody.innerHTML = `<tr><td colspan="8" class="empty-state">
+            tbody.innerHTML = `<tr><td colspan="11" class="empty-state">
                 <span class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                 No records. Execute the pipeline to populate.</td></tr>`;
             downloadBtn.disabled = true;
@@ -189,6 +216,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 <td>${domainHtml}</td>
                 <td>${esc(lead["Industry"] || "")}</td>
                 <td title="${esc(lead["Company Description"] || "")}">${truncate(esc(lead["Company Description"] || ""), 50)}</td>
+                <td>${esc(lead["Employees"] || "N/A")}</td>
+                <td>${esc(lead["Founded"] || "N/A")}</td>
+                <td>${esc(lead["HQ"] || "N/A")}</td>
                 <td>${esc(lead["Contact Name"] || "")}</td>
                 <td>${esc(lead["Contact Title"] || "")}</td>
                 <td>${esc(lead["Contact Email"] || "")}</td>
@@ -244,12 +274,12 @@ document.addEventListener("DOMContentLoaded", () => {
         // Export current table data as CSV client-side
         const rows = document.querySelectorAll("#leads-tbody tr");
         if (!rows.length) return;
-        const headers = ["Company Name", "Company Domain", "Industry", "Company Description", "Contact Name", "Contact Title", "Contact Email"];
+        const headers = ["Company Name", "Company Domain", "Industry", "Company Description", "Employees", "Founded", "HQ", "Contact Name", "Contact Title", "Contact Email"];
         let csv = headers.join(",") + "\n";
         rows.forEach(tr => {
             const cells = tr.querySelectorAll("td");
-            if (cells.length < 7) return;
-            const vals = Array.from(cells).slice(0, 7).map(td => {
+            if (cells.length < 10) return;
+            const vals = Array.from(cells).slice(0, 10).map(td => {
                 const text = td.textContent.trim().replace(/"/g, '""');
                 return `"${text}"`;
             });
@@ -295,6 +325,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function activate(step) {
         if (!step.classList.contains("done")) step.classList.add("active");
+    }
+
+    // -------------------------------------------------------
+    // PROGRESS BAR HELPERS
+    // -------------------------------------------------------
+    function resetProgress() {
+        progressWrap.style.display = "flex";
+        progressFill.style.width = "0%";
+        progressLabel.textContent = "Initializing...";
+    }
+
+    function updateProgress(progress) {
+        if (!progress) return;
+        const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+        progressFill.style.width = pct + "%";
+        progressLabel.textContent = progress.detail || `${progress.current}/${progress.total}`;
+    }
+
+    function completeProgress() {
+        progressFill.style.width = "100%";
+        progressLabel.textContent = "Pipeline complete ✓";
     }
 
     // -------------------------------------------------------

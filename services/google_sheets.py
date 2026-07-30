@@ -11,7 +11,10 @@ HEADERS = [
     "Company Name", 
     "Company Domain", 
     "Industry", 
-    "Company Description", 
+    "Company Description",
+    "Employees",
+    "Founded",
+    "HQ",
     "Contact Name", 
     "Contact Title", 
     "Contact Email", 
@@ -155,6 +158,16 @@ class LeadLogger:
             # Index by name or email
             emails_by_contact[email.contact_email] = email
 
+        # Deduplicate companies by domain or name
+        seen_companies = set()
+        unique_companies = []
+        for c in companies:
+            key = (c.domain or c.name).lower().strip()
+            if key and key not in seen_companies:
+                seen_companies.add(key)
+                unique_companies.append(c)
+        companies = unique_companies
+
         # Align the entities for tabular format
         for company in companies:
             comp_contacts = contacts_by_company.get(company.name, [])
@@ -167,6 +180,9 @@ class LeadLogger:
                     company.domain or "N/A",
                     company.industry or "N/A",
                     company.description or "N/A",
+                    company.employee_count or "N/A",
+                    company.founded_year or "N/A",
+                    company.headquarters or "N/A",
                     "N/A (No contacts found)",
                     "N/A",
                     "N/A",
@@ -184,6 +200,9 @@ class LeadLogger:
                         company.domain or "N/A",
                         company.industry or "N/A",
                         company.description or "N/A",
+                        company.employee_count or "N/A",
+                        company.founded_year or "N/A",
+                        company.headquarters or "N/A",
                         contact.name,
                         contact.title or "N/A",
                         contact.email or "N/A",

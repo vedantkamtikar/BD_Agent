@@ -1,5 +1,4 @@
 import os
-import csv
 import uuid
 import threading
 from datetime import datetime
@@ -28,20 +27,26 @@ runs_lock = threading.Lock()
 
 class RunRequest(BaseModel):
     niche: str
-    location: str = "United States"
+    location: str = "India"
     limit: int = 3
+    min_revenue: str = ""
+    max_revenue: str = ""
     sender_name: str = "Alex"
     sender_title: str = "Lead Consultant"
+    tone: str = "formal"
 
 
-def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, sender_name: str, sender_title: str):
+def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, min_revenue: str, max_revenue: str, sender_name: str, sender_title: str, tone: str):
     """Executes the LangGraph agent on a background thread."""
     initial_state = {
         "target_niche": niche,
         "location": location,
         "max_results": limit,
+        "min_revenue": min_revenue,
+        "max_revenue": max_revenue,
         "sender_name": sender_name,
         "sender_title": sender_title,
+        "tone": tone,
         "companies": [],
         "contacts": [],
         "emails": [],
@@ -57,7 +62,8 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, se
             "companies": [],
             "contacts": [],
             "emails": [],
-            "error": None
+            "error": None,
+            "progress": {"current": 0, "total": 0, "detail": "Initializing..."}
         }
 
     try:
@@ -73,6 +79,8 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, se
                         if key == "companies":
                             db["companies"].extend([c.model_dump() for c in val])
                             db["logs"].append(f"[{ts}] Discovered {len(val)} companies.")
+                            # Set progress total from discovered companies
+                            db["progress"] = {"current": 0, "total": len(val), "detail": f"Discovered {len(val)} companies"}
                         elif key == "contacts":
                             db["contacts"].extend([c.model_dump() for c in val])
                             db["logs"].append(f"[{ts}] Discovered {len(val)} contacts.")
@@ -82,11 +90,41 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, se
                         elif key == "logs":
                             for line in val:
                                 db["logs"].append(f"[{ts}] {line}")
+                                # Parse progress markers like "[PROGRESS] get_contacts: 3/5"
+                                if "[PROGRESS]" in line:
+                                    try:
+                                        parts = line.split(": ", 1)
+                                        if len(parts) == 2:
+                                            nums = parts[1].split("/")
+                                            current = int(nums[0])
+                                            total = int(nums[1])
+                                            step_name = parts[0].replace("[PROGRESS] ", "").strip()
+                                            detail_map = {
+                                                "get_contacts": f"Contacting {current}/{total} companies...",
+                                                "draft_emails": f"Drafting email {current}/{total}..."
+                                            }
+                                            db["progress"] = {
+                                                "current": current,
+                                                "total": total,
+                                                "detail": detail_map.get(step_name, f"Step {current}/{total}")
+                                            }
+                                    except (ValueError, IndexError):
+                                        pass
 
         # Convert accumulated dicts back to Pydantic objects
         companies_obj = [PydanticCompany(**c) for c in runs_db[thread_id]["companies"]]
         contacts_obj = [PydanticContact(**c) for c in runs_db[thread_id]["contacts"]]
         emails_obj = [PydanticEmailDraft(**e) for e in runs_db[thread_id]["emails"]]
+
+        # Deduplicate companies by domain or name
+        seen_domains = set()
+        unique_companies = []
+        for comp in companies_obj:
+            key = (comp.domain or comp.name).lower().strip()
+            if key and key not in seen_domains:
+                seen_domains.add(key)
+                unique_companies.append(comp)
+        companies_obj = unique_companies
 
         # Persist to Google Sheets
         with runs_lock:
@@ -102,16 +140,6 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, se
                 runs_db[thread_id]["logs"].append(
                     f"[{datetime.now().strftime('%H:%M:%S')}] Sheets warning: {sheets_err}"
                 )
-
-        # Deduplicate companies by domain
-        seen_domains = set()
-        unique_companies = []
-        for comp in companies_obj:
-            key = (comp.domain or comp.name).lower()
-            if key not in seen_domains:
-                seen_domains.add(key)
-                unique_companies.append(comp)
-        companies_obj = unique_companies
 
         # Build formatted lead rows for the frontend table
         lead_rows = []
@@ -130,6 +158,9 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, se
                     "Company Domain": comp.domain or "N/A",
                     "Industry": comp.industry or "N/A",
                     "Company Description": comp.description or "N/A",
+                    "Employees": comp.employee_count or "N/A",
+                    "Founded": comp.founded_year or "N/A",
+                    "HQ": comp.headquarters or "N/A",
                     "Contact Name": "N/A (No contacts found)",
                     "Contact Title": "N/A",
                     "Contact Email": "N/A",
@@ -144,6 +175,9 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, se
                         "Company Domain": comp.domain or "N/A",
                         "Industry": comp.industry or "N/A",
                         "Company Description": comp.description or "N/A",
+                        "Employees": comp.employee_count or "N/A",
+                        "Founded": comp.founded_year or "N/A",
+                        "HQ": comp.headquarters or "N/A",
                         "Contact Name": contact.name,
                         "Contact Title": contact.title or "N/A",
                         "Contact Email": contact.email or "N/A",
@@ -187,8 +221,11 @@ def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
         niche=request.niche,
         location=request.location,
         limit=request.limit,
+        min_revenue=request.min_revenue,
+        max_revenue=request.max_revenue,
         sender_name=request.sender_name,
-        sender_title=request.sender_title
+        sender_title=request.sender_title,
+        tone=request.tone
     )
     return {"thread_id": thread_id, "status": "started"}
 
