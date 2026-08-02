@@ -57,17 +57,45 @@ BD_Agent/
 
 ## 🚀 How to Run the Agent
 
-### 1. Interactive Prompt Mode
-Launch the runner and follow the prompts:
+### 1. Web UI Mode (Recommended)
+Launch the interactive web-based dashboard:
+```bash
+.\bd_agent\Scripts\python.exe run_web.py
+```
+Open your browser and navigate to `http://localhost:8000`.
+
+### 2. Interactive CLI Mode
+Launch the runner directly inside your terminal and follow the prompts:
 ```bash
 .\bd_agent\Scripts\python.exe main.py
 ```
 
-### 2. Non-Interactive CLI Argument Mode
-Run the agent in a single command, ideal for automation or testing background processes:
+### 3. Non-Interactive CLI Mode (Argument-based)
+Run the agent in a single command (ideal for automated cron jobs or background tests):
 ```bash
 .\bd_agent\Scripts\python.exe main.py --niche "DevOps consulting agencies" --location "United States" --limit 2
 ```
+
+---
+
+## ✨ Features Added
+- **🏢 Company Enrichment**: Automatically extracts and displays company employee count, founding year, and headquarters details.
+- **🎭 Multiple Outreach Tones**: Selectable tone dropdown in the UI (Formal, Conversational, Bold) to dynamically adjust the writing style of generated cold email drafts.
+- **📊 Real-time Progress Bar**: Interactive visual progress bar displaying real-time task status updates (e.g. *"Contacting 2/3 companies..."*).
+
+---
+
+## 🚀 Deployment (Railway / Render)
+This project is pre-configured with a `Procfile` for seamless cloud hosting.
+1. Connect your repository to **Railway** or **Render**.
+2. Set the build command to `pip install -r requirements.txt`.
+3. Set the start command to `python run_web.py`.
+4. Configure key environment variables:
+   - `GEMINI_API_KEY`
+   - `SERPER_API_KEY`
+   - `HOST` = `0.0.0.0`
+   - `PORT` = `8080` (or `10000` for Render)
+   - `NO_BROWSER` = `true`
 
 ---
 
