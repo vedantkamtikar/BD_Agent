@@ -1,6 +1,6 @@
 # B2B Lead-Generation Agentic Pipeline
 
-An agentic B2B lead-generation pipeline built using **LangGraph**, **Gemini API** (with Google Search Grounding), **Pydantic**, and **Tenacity**. 
+An agentic B2B lead-generation pipeline built using **LangGraph**, **Gemini API** (for structured reasoning & generation), **Serper API** (for Google Search queries), **Pydantic**, and **Tenacity**. 
 
 Unlike rigid linear workflows, this agent evaluates findings dynamically to adjust its routing path—for example, skipping the outreach email drafting node if no executive contacts are discovered for a company.
 
@@ -9,8 +9,9 @@ Unlike rigid linear workflows, this agent evaluates findings dynamically to adju
 ## 🛠️ Tech Stack & Concepts Covered
 - **LangGraph**: Orchestrates the state graph, nodes, normal edges, conditional edges, and state checkpoint memory.
 - **Pydantic (v2)**: Enforces structured schema validation (`Company`, `Contact`, and `EmailDraft` models) to prevent data corruption.
-- **Google Search Grounding**: Connects the Gemini model directly to Google Search to discover real-time companies, domains, and contact records.
-- **Tenacity**: Implements exponential-backoff retry logic to handle Gemini's free-tier rate limits (15 RPM).
+- **Serper.dev API**: Queries Google Search to find real-time company websites, business details, and executive contact information.
+- **Gemini API**: Performs structured extraction of search results into Pydantic schemas and drafts custom B2B outreach emails.
+- **Tenacity**: Implements exponential-backoff retry logic to handle API rate limits.
 - **Google Sheets API**: Logs leads into a Google Spreadsheet, with automatic fallback to a local `leads_log.csv` file.
 
 ---
