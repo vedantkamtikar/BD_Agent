@@ -18,8 +18,8 @@
     --input-bg: #FFFFFF;
     --table-header-bg: #F0F7F4;
 
-    /* Gradients */
-    --accent-gradient: linear-gradient(135deg, #059669 0%, #0D9488 50%, #D97706 100%);
+    /* Gradients / Solid Colors */
+    --accent-gradient: #059669;
     --card-gradient-overlay: linear-gradient(135deg, rgba(5, 150, 105, 0.04) 0%, transparent 100%);
     --grid-pattern: radial-gradient(rgba(6, 95, 70, 0.06) 1px, transparent 1px);
 
@@ -36,10 +36,10 @@
     --shadow-accent: 0 4px 16px rgba(5, 150, 105, 0.25);
     --shadow-accent-lg: 0 8px 28px rgba(5, 150, 105, 0.35);
 
-    /* Radii */
-    --radius-sm: 8px;
-    --radius-md: 14px;
-    --radius-lg: 20px;
+    /* Radii (Sharper corners) */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
     --radius-full: 9999px;
 
     color-scheme: light;
@@ -60,7 +60,7 @@
     --input-bg: #111B27;
     --table-header-bg: #111B27;
 
-    --accent-gradient: linear-gradient(135deg, #10B981 0%, #34D399 50%, #F59E0B 100%);
+    --accent-gradient: #10B981;
     --card-gradient-overlay: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, transparent 100%);
     --grid-pattern: radial-gradient(rgba(16, 185, 129, 0.08) 1px, transparent 1px);
 
