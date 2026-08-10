@@ -4,24 +4,24 @@
    ========================================================================== */
 
 :root {
-    /* Color Palette — Light Mode */
-    --background: #F8FAFC;
-    --foreground: #0F172A;
-    --muted: #F1F5F9;
-    --muted-foreground: #64748B;
-    --accent: #4F46E5; /* Deep Indigo */
-    --accent-secondary: #0284C7; /* Cyan Accent */
+    /* Color Palette — Light Mode (Warm Emerald Sand) */
+    --background: #FBFBF8;
+    --foreground: #091E16;
+    --muted: #F0F7F4;
+    --muted-foreground: #52796F;
+    --accent: #059669; /* Deep Emerald */
+    --accent-secondary: #0D9488; /* Teal Accent */
     --accent-foreground: #FFFFFF;
-    --border: #E2E8F0;
+    --border: #E2EBF0;
     --card: #FFFFFF;
-    --ring: #4F46E5;
+    --ring: #059669;
     --input-bg: #FFFFFF;
-    --table-header-bg: #F1F5F9;
+    --table-header-bg: #F0F7F4;
 
     /* Gradients */
-    --accent-gradient: linear-gradient(135deg, #4F46E5 0%, #0284C7 100%);
-    --card-gradient-overlay: linear-gradient(135deg, rgba(79, 70, 229, 0.04) 0%, transparent 100%);
-    --grid-pattern: radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+    --accent-gradient: linear-gradient(135deg, #059669 0%, #0D9488 50%, #D97706 100%);
+    --card-gradient-overlay: linear-gradient(135deg, rgba(5, 150, 105, 0.04) 0%, transparent 100%);
+    --grid-pattern: radial-gradient(rgba(6, 95, 70, 0.06) 1px, transparent 1px);
 
     /* Typography */
     --font-display: "Fraunces", Georgia, serif;
@@ -29,12 +29,12 @@
     --font-mono: "JetBrains Mono", monospace;
 
     /* Elevation & Shadows */
-    --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04);
-    --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.05);
-    --shadow-lg: 0 12px 28px rgba(15, 23, 42, 0.07);
-    --shadow-xl: 0 24px 48px -12px rgba(15, 23, 42, 0.1);
-    --shadow-accent: 0 4px 16px rgba(79, 70, 229, 0.25);
-    --shadow-accent-lg: 0 8px 28px rgba(79, 70, 229, 0.35);
+    --shadow-sm: 0 1px 3px rgba(9, 30, 22, 0.04);
+    --shadow-md: 0 4px 14px rgba(9, 30, 22, 0.05);
+    --shadow-lg: 0 12px 28px rgba(9, 30, 22, 0.07);
+    --shadow-xl: 0 24px 48px -12px rgba(9, 30, 22, 0.1);
+    --shadow-accent: 0 4px 16px rgba(5, 150, 105, 0.25);
+    --shadow-accent-lg: 0 8px 28px rgba(5, 150, 105, 0.35);
 
     /* Radii */
     --radius-sm: 8px;
@@ -45,30 +45,30 @@
     color-scheme: light;
 }
 
-/* Dark Theme Tokens (Deep Cyber Atmosphere) */
+/* Dark Theme Tokens (Bioluminescent Emerald Obsidian) */
 [data-theme="dark"] {
-    --background: #070B14;
-    --foreground: #F8FAFC;
-    --muted: #131C2E;
-    --muted-foreground: #94A3B8;
-    --accent: #38BDF8;
-    --accent-secondary: #818CF8;
-    --accent-foreground: #0F172A;
-    --border: rgba(255, 255, 255, 0.09);
-    --card: #0E1626;
-    --ring: #38BDF8;
-    --input-bg: #131C2E;
-    --table-header-bg: #131C2E;
+    --background: #080D14;
+    --foreground: #F0FDF4;
+    --muted: #111B27;
+    --muted-foreground: #78909C;
+    --accent: #10B981; /* Bioluminescent Emerald */
+    --accent-secondary: #34D399; /* Mint Accent */
+    --accent-foreground: #022C22;
+    --border: rgba(16, 185, 129, 0.15);
+    --card: #0D1520;
+    --ring: #10B981;
+    --input-bg: #111B27;
+    --table-header-bg: #111B27;
 
-    --accent-gradient: linear-gradient(135deg, #38BDF8 0%, #6366F1 50%, #A855F7 100%);
-    --card-gradient-overlay: linear-gradient(135deg, rgba(56, 189, 248, 0.05) 0%, transparent 100%);
-    --grid-pattern: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    --accent-gradient: linear-gradient(135deg, #10B981 0%, #34D399 50%, #F59E0B 100%);
+    --card-gradient-overlay: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, transparent 100%);
+    --grid-pattern: radial-gradient(rgba(16, 185, 129, 0.08) 1px, transparent 1px);
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.6);
     --shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
-    --shadow-accent: 0 4px 18px rgba(56, 189, 248, 0.35);
+    --shadow-accent: 0 4px 20px rgba(16, 185, 129, 0.35);
 
     color-scheme: dark;
 }
@@ -115,10 +115,10 @@ body::before {
     position: fixed;
     top: -20%;
     left: 20%;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, rgba(56, 189, 248, 0.05) 50%, transparent 70%);
-    filter: blur(80px);
+    width: 650px;
+    height: 650px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.14) 0%, rgba(52, 211, 153, 0.06) 45%, transparent 70%);
+    filter: blur(90px);
     pointer-events: none;
     z-index: -1;
     animation: ambientFloat 18s ease-in-out infinite alternate;
