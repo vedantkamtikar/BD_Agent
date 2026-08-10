@@ -355,7 +355,7 @@ select.form-input {
     justify-content: center;
     gap: 0.65rem;
     padding: 0.9rem 1.5rem;
-    background: var(--accent-gradient);
+    background: #059669;
     border: none;
     border-radius: var(--radius-md);
     color: #FFFFFF;
@@ -363,16 +363,26 @@ select.form-input {
     font-size: 0.95rem;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: var(--shadow-accent);
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.28);
     transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
     margin-top: 0.5rem;
 }
 
+[data-theme="dark"] .btn-primary {
+    background: #10B981;
+    color: #022C22;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
+}
+
 .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-accent-lg);
+    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.38);
+}
+
+[data-theme="dark"] .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.38);
 }
 
 .btn-primary:active:not(:disabled) {
