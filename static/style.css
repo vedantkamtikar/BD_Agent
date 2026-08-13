@@ -426,14 +426,9 @@ select.form-input {
    02. MONITOR CARD (PIPELINE CONSOLE)
    ========================================================================== */
 .card-dark {
-    background: #0B111E;
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--card);
+    border-color: var(--border);
     margin-top: 1.5rem;
-}
-
-[data-theme="light"] .card-dark {
-    background: #0F172A;
-    color: #F8FAFC;
 }
 
 .monitor-top-bar {
@@ -449,17 +444,17 @@ select.form-input {
     justify-content: space-between;
     font-family: var(--font-mono);
     font-size: 0.78rem;
-    color: #94A3B8;
+    color: var(--muted-foreground);
     padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--border);
     margin-bottom: 1.25rem;
 }
 
 .thread-code {
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--muted);
     padding: 0.25rem 0.6rem;
     border-radius: var(--radius-sm);
-    color: #38BDF8;
+    color: var(--accent);
 }
 
 /* Status Badge */
@@ -528,18 +523,18 @@ select.form-input {
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.65rem 0.85rem;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font-family: var(--font-mono);
     font-size: 0.72rem;
-    color: #64748B;
+    color: var(--muted-foreground);
     transition: all 0.3s ease;
 }
 
 .step-num {
     font-size: 0.65rem;
-    color: #475569;
+    color: var(--muted-foreground);
 }
 
 .pipeline-step.active {
@@ -565,7 +560,7 @@ select.form-input {
 .progress-bar-track {
     width: 100%;
     height: 7px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--border);
     border-radius: var(--radius-full);
     overflow: hidden;
 }
@@ -582,13 +577,13 @@ select.form-input {
 .progress-label {
     font-family: var(--font-mono);
     font-size: 0.75rem;
-    color: #94A3B8;
+    color: var(--muted-foreground);
 }
 
 /* Console Log Box */
 .console-box {
-    background: #05080E;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     height: 200px;
     padding: 0.85rem 1rem;
@@ -596,11 +591,18 @@ select.form-input {
     font-family: var(--font-mono);
     font-size: 0.78rem;
     line-height: 1.6;
+    color: var(--foreground);
+}
+
+/* Dark mode console keeps deep background */
+[data-theme="dark"] .console-box {
+    background: #05080E;
+    border-color: rgba(255, 255, 255, 0.06);
     color: #CBD5E1;
 }
 
 .console-placeholder {
-    color: #475569;
+    color: var(--muted-foreground);
     font-style: italic;
 }
 
