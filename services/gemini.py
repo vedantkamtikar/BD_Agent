@@ -236,8 +236,9 @@ class GeminiService:
         valid_contacts = [c for c in parsed_result.contacts if c.name and c.name.lower() != "n/a"]
         
         # Phase 2: Targeted Email Hunting Loop for each contact
+        # Uses a structured 3-query playbook instead of free-form LLM query generation.
         decision_llm = self.llm_parse.with_structured_output(EmailSearchDecision)
-        
+
         decision_prompt = ChatPromptTemplate.from_template(
             "You are a B2B contact verification assistant. Your absolute priority is to find the actual email address of {contact_name} who works as {contact_title} at {company_name} (domain: {company_domain}).\n\n"
             "Below are the web search results for the current search query:\n"
@@ -245,7 +246,7 @@ class GeminiService:
             "Analyze the snippets carefully:\n"
             "1. If a valid, real email address belonging to {contact_name} is explicitly listed/found in the search snippets (e.g., 'john.doe@{company_domain}', 'jdoe@{company_domain}', or contact details), extract it into 'email_found'.\n"
             "2. If no exact email address is explicitly found, set 'email_found' to null. Do NOT make up, guess, or generate an email using naming patterns. This is a strict constraint.\n"
-            "3. If no email is found and you still want to try searching further, formulate a highly targeted, specific search query to run next in 'next_search_query' (e.g., '\"{contact_name}\" \"{company_domain}\" email OR contact'). If you believe further search is futile, set 'next_search_query' to null.\n\n"
+            "3. Set 'next_search_query' to null — the search strategy is managed externally.\n\n"
             "Provide your reasoning in the 'reasoning' field."
         )
 
@@ -255,55 +256,78 @@ class GeminiService:
                 print(log_msg)
                 logs_out.append(log_msg)
                 continue
-            
-            # Start loop
-            current_query = f'"{contact.name}" "{company.domain or company.name}" email OR contact'
+
+            domain = company.domain or ""
+            contact_name = contact.name
+            company_name_str = company.name
+
+            # Structured 3-query playbook — each query uses a different strategy
+            playbook_queries = [
+                # Q1: Search within the company's own website (team/contact/about pages)
+                f'site:{domain} "{contact_name}" email OR contact' if domain else f'"{contact_name}" "{company_name_str}" site contact',
+                # Q2: Classic email dork — name + domain + email keyword
+                f'"{contact_name}" "{domain}" email OR contact' if domain else f'"{contact_name}" "{company_name_str}" email contact',
+                # Q3: PDFs, regulatory filings, LinkedIn — often expose emails
+                f'"{contact_name}" "{company_name_str}" email filetype:pdf OR site:linkedin.com',
+            ]
+
             email_found = None
-            
-            for attempt in range(1, 4):
-                log_msg = f"[Agent Loop] [{contact.name}] Attempt {attempt}/3: Searching: '{current_query}'"
+
+            for attempt, current_query in enumerate(playbook_queries, 1):
+                log_msg = f"[Agent Loop] [{contact_name}] Attempt {attempt}/3: '{current_query}'"
                 print(log_msg)
                 logs_out.append(log_msg)
-                
-                attempt_markdown = self.serper.search(current_query, num_results=10)
-                
+
+                # Step A: Run Serper search — get snippets + raw URLs
+                attempt_markdown, page_urls = self.serper.search_with_urls(current_query, num_results=10)
+
+                # Step B: Deterministic page scrape — scan top 3 URLs for @domain emails
+                if domain and page_urls:
+                    log_msg = f"[Page Scrape] [{contact_name}] Scanning {min(3, len(page_urls))} pages for @{domain} emails..."
+                    print(log_msg)
+                    logs_out.append(log_msg)
+                    for url in page_urls[:3]:
+                        scraped_emails = self.serper.fetch_emails_from_page(url, domain)
+                        if scraped_emails:
+                            email_found = scraped_emails[0]
+                            log_msg = f"[Page Scrape] Found email via page scan: '{email_found}' on {url}"
+                            print(log_msg)
+                            logs_out.append(log_msg)
+                            break
+
+                if email_found:
+                    break
+
+                # Step C: LLM evaluates snippets for any explicitly listed email
                 decision: EmailSearchDecision = decision_llm.invoke(
                     decision_prompt.format(
-                        contact_name=contact.name,
+                        contact_name=contact_name,
                         contact_title=contact.title or "executive",
-                        company_name=company.name,
-                        company_domain=company.domain or "",
+                        company_name=company_name_str,
+                        company_domain=domain,
                         markdown=attempt_markdown
                     )
                 )
-                
-                log_msg = f"[Agent Decision] [{contact.name}] Reasoning: {decision.reasoning}"
+
+                log_msg = f"[Agent Decision] [{contact_name}] Reasoning: {decision.reasoning}"
                 print(log_msg)
                 logs_out.append(log_msg)
-                
+
                 if decision.email_found and "@" in decision.email_found:
                     email_found = decision.email_found.strip()
-                    log_msg = f"[Agent Loop] Success! Found email: '{email_found}'"
+                    log_msg = f"[Agent Loop] LLM found email in snippets: '{email_found}'"
                     print(log_msg)
                     logs_out.append(log_msg)
                     break
-                
-                if not decision.next_search_query:
-                    log_msg = f"[Agent Loop] Decision: No further search queries suggested. Stopping search."
-                    print(log_msg)
-                    logs_out.append(log_msg)
-                    break
-                
-                current_query = decision.next_search_query
-            
+
             if email_found:
                 contact.email = email_found
             else:
-                log_msg = f"[Agent Loop] Failed to find a verified email for {contact.name}. Setting to N/A."
+                log_msg = f"[Agent Loop] All 3 strategies exhausted for {contact_name}. Setting to N/A."
                 print(log_msg)
                 logs_out.append(log_msg)
                 contact.email = "N/A"
-                
+
         return valid_contacts
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))

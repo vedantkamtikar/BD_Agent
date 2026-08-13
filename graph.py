@@ -85,11 +85,17 @@ def get_contacts_node(state: LeadState) -> Dict[str, Any]:
         
     total = len(companies)
     print(f"[get_contacts] Searching contacts for {total} companies...")
+    node_logs = []
     for idx, company in enumerate(companies, 1):
         print(f"[get_contacts] [{idx}/{total}] Searching contacts at '{company.name}'...")
-        contacts = gemini_service.get_contacts_for_company(company, max_contacts=1)
+        contacts = gemini_service.get_contacts_for_company(company, max_contacts=3, logs_out=node_logs)
         if contacts:
-            all_contacts.append(contacts[0])
+            # Prefer the first contact that has a verified email; fall back to primary contact
+            best = next(
+                (c for c in contacts if c.email and c.email != "N/A" and "@" in c.email),
+                contacts[0]
+            )
+            all_contacts.append(best)
         
     log_msg = f"get_contacts: Discovered {len(all_contacts)} contacts total."
     print(f"\n[NODE] EXITING: get_contacts -> {log_msg}")
@@ -97,7 +103,7 @@ def get_contacts_node(state: LeadState) -> Dict[str, Any]:
     
     return {
         "contacts": all_contacts,
-        "logs": [f"[PROGRESS] get_contacts: {idx}/{total}" for idx in range(1, total + 1)] + [log_msg]
+        "logs": [f"[PROGRESS] get_contacts: {idx}/{total}" for idx in range(1, total + 1)] + node_logs + [log_msg]
     }
 
 
@@ -150,12 +156,18 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     
     for idx, contact in enumerate(contacts, 1):
         company = company_map.get(contact.company_name)
-        if company:
-            print(f"[draft_emails] [{idx}/{total}] Drafting email for '{contact.name}' at '{company.name}'...")
-            draft = gemini_service.draft_outreach_email(company, contact, sender_name, sender_title, tone)
-            email_drafts.append(draft)
-        else:
+        if not company:
             print(f"[draft_emails] Warning: Could not find matching company '{contact.company_name}' in state.")
+            continue
+
+        # Change 4: Skip drafting when no verified email was found
+        if not contact.email or contact.email == "N/A" or "@" not in contact.email:
+            print(f"[draft_emails] [{idx}/{total}] Skipping draft for '{contact.name}' — no verified email found.")
+            continue
+
+        print(f"[draft_emails] [{idx}/{total}] Drafting email for '{contact.name}' at '{company.name}'...")
+        draft = gemini_service.draft_outreach_email(company, contact, sender_name, sender_title, tone)
+        email_drafts.append(draft)
             
     log_msg = f"draft_emails: Generated {len(email_drafts)} customized email drafts."
     print(f"\n[NODE] EXITING: draft_emails -> {log_msg}")

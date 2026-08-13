@@ -1,6 +1,8 @@
+import re
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
+EMAIL_REGEX = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
 
 SERPER_API_URL = "https://google.serper.dev/search"
 
@@ -50,6 +52,69 @@ class SerperService:
         data = response.json()
 
         return self._format_results(data)
+
+    def search_with_urls(self, query: str, num_results: int = 10) -> Tuple[str, List[str]]:
+        """
+        Like search(), but also returns the list of organic result URLs
+        so the caller can attempt direct page scraping.
+
+        Returns:
+            (markdown_str, list_of_urls)
+        """
+        payload = {
+            "q": query,
+            "num": num_results
+        }
+
+        print(f"[SerperService] Searching: '{query}' (requesting {num_results} results)...")
+
+        response = requests.post(
+            SERPER_API_URL,
+            headers=self.headers,
+            json=payload,
+            timeout=15
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        markdown = self._format_results(data)
+        urls = [r.get("link", "") for r in data.get("organic", []) if r.get("link")]
+        return markdown, urls
+
+    def fetch_emails_from_page(self, url: str, target_domain: str) -> List[str]:
+        """
+        Fetches a web page and extracts all email addresses matching @target_domain
+        using a regex scan over the full HTML body.
+        This is deterministic — no LLM involved, zero hallucination risk.
+
+        Args:
+            url: The full URL to fetch.
+            target_domain: Only return emails ending with this domain (e.g., 'tata.com').
+
+        Returns:
+            A deduplicated list of found email addresses.
+        """
+        try:
+            resp = requests.get(
+                url,
+                timeout=6,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; LeadAgentBot/1.0)"},
+                allow_redirects=True
+            )
+            if resp.status_code != 200:
+                return []
+
+            all_emails = EMAIL_REGEX.findall(resp.text)
+            # Filter to only emails belonging to the target domain
+            domain_emails = [
+                e.lower() for e in all_emails
+                if e.lower().endswith(f"@{target_domain.lower()}")
+            ]
+            return list(set(domain_emails))
+
+        except Exception as exc:
+            print(f"[SerperService] Page fetch failed for {url}: {exc}")
+            return []
 
     def _format_results(self, data: Dict[str, Any]) -> str:
         """
