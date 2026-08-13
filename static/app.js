@@ -184,9 +184,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    let currentLeads = [];
+
     function renderTable(leads) {
-        if (!leads.length) {
-            tbody.innerHTML = `<tr><td colspan="11" class="empty-state">
+        currentLeads = leads || [];
+        if (!currentLeads.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">
                 <span class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                 No records. Execute the pipeline to populate.</td></tr>`;
             downloadBtn.disabled = true;
@@ -195,33 +198,38 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         downloadBtn.disabled = false;
-        countLabel.textContent = `${leads.length} lead${leads.length !== 1 ? "s" : ""} recorded`;
+        countLabel.textContent = `${currentLeads.length} lead${currentLeads.length !== 1 ? "s" : ""} recorded`;
         tbody.innerHTML = "";
 
-        [...leads].reverse().forEach((lead, i) => {
+        [...currentLeads].reverse().forEach((lead, i) => {
             const tr = document.createElement("tr");
             tr.style.animationDelay = `${i * 30}ms`;
 
+            const compName = esc(lead["Company Name"] || "");
             const domain = lead["Company Domain"];
             const domainHtml = domain && domain !== "N/A"
                 ? `<a href="https://${domain}" target="_blank" rel="noopener" class="table-link">${domain}</a>`
-                : `<span class="text-muted">&mdash;</span>`;
+                : "";
+
+            const contactName = esc(lead["Contact Name"] || "");
+            const contactTitle = esc(lead["Contact Title"] || "");
+            const contactEmail = esc(lead["Contact Email"] || "");
 
             const hasEmail = lead["Email Subject"]
                 && !lead["Email Subject"].includes("skipped")
                 && lead["Email Subject"] !== "N/A";
 
             tr.innerHTML = `
-                <td><strong>${esc(lead["Company Name"] || "")}</strong></td>
-                <td>${domainHtml}</td>
-                <td>${esc(lead["Industry"] || "")}</td>
-                <td title="${esc(lead["Company Description"] || "")}">${truncate(esc(lead["Company Description"] || ""), 50)}</td>
-                <td>${esc(lead["Employees"] || "N/A")}</td>
-                <td>${esc(lead["Founded"] || "N/A")}</td>
-                <td>${esc(lead["HQ"] || "N/A")}</td>
-                <td>${esc(lead["Contact Name"] || "")}</td>
-                <td>${esc(lead["Contact Title"] || "")}</td>
-                <td>${esc(lead["Contact Email"] || "")}</td>
+                <td>
+                    <div class="cell-primary">${compName}</div>
+                    ${domainHtml ? `<div class="cell-sub">${domainHtml}</div>` : ""}
+                </td>
+                <td><span class="badge-subtle">${esc(lead["Industry"] || "N/A")}</span></td>
+                <td>
+                    <div class="cell-primary">${contactName}</div>
+                    ${contactTitle && contactTitle !== "N/A" ? `<div class="cell-sub">${contactTitle}</div>` : ""}
+                </td>
+                <td><code class="email-code">${contactEmail || "&mdash;"}</code></td>
                 <td></td>
             `;
 
@@ -271,16 +279,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     downloadBtn.addEventListener("click", () => {
-        // Export current table data as CSV client-side
-        const rows = document.querySelectorAll("#leads-tbody tr");
-        if (!rows.length) return;
+        if (!currentLeads.length) return;
         const headers = ["Company Name", "Company Domain", "Industry", "Company Description", "Employees", "Founded", "HQ", "Contact Name", "Contact Title", "Contact Email"];
         let csv = headers.join(",") + "\n";
-        rows.forEach(tr => {
-            const cells = tr.querySelectorAll("td");
-            if (cells.length < 10) return;
-            const vals = Array.from(cells).slice(0, 10).map(td => {
-                const text = td.textContent.trim().replace(/"/g, '""');
+        currentLeads.forEach(lead => {
+            const vals = headers.map(h => {
+                const text = String(lead[h] || "").replace(/"/g, '""');
                 return `"${text}"`;
             });
             csv += vals.join(",") + "\n";

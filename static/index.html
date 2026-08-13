@@ -164,9 +164,14 @@
                 <div class="card-elevated output-card">
                     <div class="output-header">
                         <div>
-
                             <h2 class="card-title">Discovered Leads</h2>
-                            <p class="output-count" id="lead-count-label">No records</p>
+                            <div class="output-sub-row">
+                                <p class="output-count" id="lead-count-label">No records</p>
+                                <span class="dot-separator">&bull;</span>
+                                <p class="sheets-notice">
+                                    Results auto-sync to <a href="https://docs.google.com/spreadsheets/d/1ZqfvslHP_jpQyKooohvqpUamq1EUvQoi0YXNfUTZ3ig/edit" target="_blank" rel="noopener" class="sheets-link">Google Sheets ↗</a>
+                                </p>
+                            </div>
                         </div>
                         <button class="btn-outline" id="download-btn" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -179,21 +184,15 @@
                             <thead>
                                 <tr>
                                     <th>Company</th>
-                                    <th>Domain</th>
                                     <th>Industry</th>
-                                    <th>Description</th>
-                                    <th>Employees</th>
-                                    <th>Founded</th>
-                                    <th>HQ</th>
                                     <th>Contact</th>
-                                    <th>Title</th>
                                     <th>Email</th>
                                     <th>Outreach</th>
                                 </tr>
                             </thead>
                             <tbody id="leads-tbody">
                                 <tr>
-                                    <td colspan="11" class="empty-state">
+                                    <td colspan="5" class="empty-state">
                                         <div class="empty-content">
                                             <span class="empty-icon">
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>

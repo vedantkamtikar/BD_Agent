@@ -634,10 +634,69 @@ select.form-input {
     margin-bottom: 1.5rem;
 }
 
+.output-sub-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.2rem;
+}
+
 .output-count {
     font-family: var(--font-mono);
     font-size: 0.825rem;
     color: var(--muted-foreground);
+}
+
+.dot-separator {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    opacity: 0.5;
+}
+
+.sheets-notice {
+    font-size: 0.78rem;
+    color: var(--muted-foreground);
+}
+
+.sheets-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s ease;
+}
+
+.sheets-link:hover {
+    text-decoration: underline;
+    opacity: 0.9;
+}
+
+.cell-primary {
+    font-weight: 600;
+    color: var(--foreground);
+}
+
+.cell-sub {
+    font-size: 0.78rem;
+    color: var(--muted-foreground);
+    margin-top: 2px;
+}
+
+.badge-subtle {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--foreground);
+}
+
+.email-code {
+    font-family: var(--font-mono);
+    font-size: 0.825rem;
+    color: var(--foreground);
 }
 
 .btn-outline {
