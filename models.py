@@ -9,9 +9,7 @@ class Company(BaseModel):
     name: str = Field(description="The formal or commonly known name of the company.")
     domain: Optional[str] = Field(None, description="The official domain of the company website, normalized to lowercase (e.g., 'stripe.com').")
     industry: Optional[str] = Field(None, description="The primary industry or business vertical of the company.")
-    description: Optional[str] = Field(None, description="A brief summary of what the company does, its core products, or target audience.")
     employee_count: Optional[str] = Field(None, description="Estimated number of employees (e.g., '500+', '1,000-5,000').")
-    founded_year: Optional[str] = Field(None, description="The year the company was founded (e.g., '2005').")
     headquarters: Optional[str] = Field(None, description="The city/state where the company is headquartered (e.g., 'Pune, Maharashtra').")
     source: Optional[str] = Field(None, description="The search query or contextual source from which the company was found.")
 

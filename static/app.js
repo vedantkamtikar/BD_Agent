@@ -280,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     downloadBtn.addEventListener("click", () => {
         if (!currentLeads.length) return;
-        const headers = ["Company Name", "Company Domain", "Industry", "Company Description", "Employees", "Founded", "HQ", "Contact Name", "Contact Title", "Contact Email"];
+        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "Contact Name", "Contact Title", "Contact Email"];
         let csv = headers.join(",") + "\n";
         currentLeads.forEach(lead => {
             const vals = headers.map(h => {
