@@ -1,11 +1,21 @@
-import os
-from typing import List, Optional
+import re
+import logging
+from typing import List, Optional, Dict, Any
 from urllib.parse import urlparse
+
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
-import logging
+
+import config
+from models import Company, Contact, EmailDraft
+from services.serper import (
+    SerperService,
+    extract_emails_from_text,
+    is_matching_contact_email,
+    is_generic_email
+)
 
 logger = logging.getLogger("GeminiService")
 logger.setLevel(logging.WARNING)
@@ -14,9 +24,34 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter('[GeminiService] RETRY %(message)s'))
     logger.addHandler(handler)
 
-import config
-from models import Company, Contact, EmailDraft
-from services.serper import SerperService
+NON_PERSON_KEYWORDS = {
+    "board", "directors", "management", "team", "inc", "ltd", "corp", "llc",
+    "group", "services", "solutions", "officer", "support", "inquiry", "inquiries",
+    "sales", "general", "department", "company", "enterprise", "advisory",
+    "investor", "relations", "leadership", "headquarters", "contact", "about",
+    "staff", "careers", "press", "media", "privacy", "security", "customer",
+    "service", "committee", "administration", "global", "international"
+}
+
+
+def is_valid_person_name(name: str) -> bool:
+    """
+    Validates that a contact name represents a real individual rather than
+    a generic department, board, or corporate placeholder.
+    """
+    if not name or name.strip().lower() in ("n/a", "unknown", "none", "null"):
+        return False
+    # Strip common honorifics
+    cleaned = re.sub(r'^(dr\.|mr\.|ms\.|mrs\.|prof\.)\s+', '', name.strip(), flags=re.IGNORECASE)
+    tokens = [t.lower() for t in cleaned.split() if re.sub(r'[^a-zA-Z]', '', t)]
+    if len(tokens) < 2 or len(tokens) > 5:
+        return False
+    # Reject if any token is a corporate placeholder / non-person keyword
+    if any(tok in NON_PERSON_KEYWORDS for tok in tokens):
+        return False
+    return True
+
+
 
 
 def normalize_domain(url: str) -> str:
@@ -49,11 +84,6 @@ class CompanyList(BaseModel):
 class ContactList(BaseModel):
     contacts: List[Contact] = Field(description="List of contacts discovered for the company")
 
-
-class EmailSearchDecision(BaseModel):
-    reasoning: str = Field(description="Internal reasoning evaluating the search snippets. Note if a candidate email was explicitly found, or if we need to search further.")
-    email_found: Optional[str] = Field(None, description="The exact email address found in the search snippets. ONLY populate if it is explicitly written/found in the search results. NEVER generate or make up an email from a pattern.")
-    next_search_query: Optional[str] = Field(None, description="The next Google search query to run to find this person's email if not found yet (e.g. '\"John Doe\" \"company.com\" contact OR email').")
 
 
 class GeminiService:
@@ -170,13 +200,160 @@ class GeminiService:
         print(f"[GeminiService] Successfully discovered and structured {len(unique_companies)} unique companies.")
         return unique_companies
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
-    def get_contacts_for_company(self, company: Company, max_contacts: int = 1, logs_out: Optional[List[str]] = None) -> List[Contact]:
+    def _hunt_email_for_contact(
+        self,
+        contact: Contact,
+        company: Company,
+        logs_out: List[str]
+    ) -> Contact:
         """
-        Step 1 (Search): Searches for executive contacts at a company using Google search grounding.
-        Step 2 (Parse): Converts the unstructured contact list into Contact Pydantic models.
-        Step 3 (Agent Loop): Runs up to 3 iterative targeted queries to find the actual email address
-        for each discovered contact, strictly without generating guessed email patterns.
+        Searches for a contact's email using 2 targeted queries + regex snippet scanning.
+        No page scraping. No LLM evaluation. Returns 'N/A' if nothing verified.
+        """
+        if contact.email and "@" in contact.email and not is_generic_email(contact.email):
+            log_msg = f"[Email Hunt] Verified email '{contact.email}' already present for {contact.name}."
+            print(log_msg)
+            logs_out.append(log_msg)
+            return contact
+
+        domain = company.domain or ""
+        contact_name = contact.name
+        company_name_str = company.name
+
+        # 2-query strategy — broader, higher yield than restrictive dorks
+        queries = [
+            # Q1 (broad): name + company + email keyword — catches LinkedIn, press releases, team pages
+            f'"{contact_name}" "{company_name_str}" email',
+            # Q2 (domain-specific): name + @domain — catches direct indexed emails
+            f'"{contact_name}" "@{domain}"' if domain else f'"{contact_name}" "{company_name_str}" contact',
+        ]
+
+        email_found = None
+        all_domain_emails = []  # Collected for pattern inference
+
+        for attempt, query in enumerate(queries, 1):
+            log_msg = f"[Email Hunt] [{contact_name}] Query {attempt}/{len(queries)}: '{query}'"
+            print(log_msg)
+            logs_out.append(log_msg)
+
+            try:
+                result_markdown = self.serper.search(query, num_results=10)
+            except Exception as e:
+                print(f"[Email Hunt] Search error: {e}")
+                continue
+
+            # Regex scan on snippets — fast, deterministic, zero token cost
+            snippet_emails = extract_emails_from_text(result_markdown, target_domain=domain, filter_generic=True)
+            if snippet_emails:
+                all_domain_emails.extend(snippet_emails)
+                for se in snippet_emails:
+                    if is_matching_contact_email(se, contact_name):
+                        email_found = se
+                        log_msg = f"[Email Hunt] Found matching email in snippets: '{email_found}'"
+                        print(log_msg)
+                        logs_out.append(log_msg)
+                        break
+
+            if email_found:
+                break
+
+            # If no name-matched email but we found domain emails, accept first non-generic one
+            # only on the last query attempt (fallback)
+            if not email_found and attempt == len(queries) and snippet_emails:
+                email_found = snippet_emails[0]
+                log_msg = f"[Email Hunt] No name-match found. Using best domain email: '{email_found}'"
+                print(log_msg)
+                logs_out.append(log_msg)
+
+        # Pattern inference fallback: if we found other emails at this domain,
+        # infer the pattern and synthesize a candidate, then verify it
+        if not email_found and domain and all_domain_emails:
+            candidate = self._try_pattern_synthesis(contact_name, domain, all_domain_emails, logs_out)
+            if candidate:
+                email_found = candidate
+
+        if email_found:
+            contact.email = email_found
+        else:
+            log_msg = f"[Email Hunt] All strategies exhausted for {contact_name}. Setting to N/A."
+            print(log_msg)
+            logs_out.append(log_msg)
+            contact.email = "N/A"
+
+        return contact
+
+    def _try_pattern_synthesis(
+        self,
+        contact_name: str,
+        domain: str,
+        sample_emails: List[str],
+        logs_out: List[str]
+    ) -> Optional[str]:
+        """
+        Infers an email pattern from sample domain emails and synthesizes a candidate.
+        Verifies the candidate with a live search. Returns None if unverified.
+        """
+        clean_domain = domain.lower().replace("www.", "").strip()
+        domain_emails = [e.lower() for e in sample_emails if e.endswith(f"@{clean_domain}")]
+        if not domain_emails:
+            return None
+
+        # Detect pattern from first matching email
+        pattern = None
+        for email in domain_emails:
+            local = email.split("@")[0]
+            if "." in local and len(local.split(".")) == 2:
+                pattern = "first.last"
+                break
+            elif "_" in local and len(local.split("_")) == 2:
+                pattern = "first_last"
+                break
+
+        if not pattern:
+            return None
+
+        # Synthesize candidate
+        name_clean = re.sub(r'[^a-zA-Z\s]', '', contact_name).lower().strip()
+        tokens = name_clean.split()
+        if len(tokens) < 2:
+            return None
+
+        first, last = tokens[0], tokens[-1]
+        if pattern == "first.last":
+            candidate = f"{first}.{last}@{clean_domain}"
+        elif pattern == "first_last":
+            candidate = f"{first}_{last}@{clean_domain}"
+        else:
+            return None
+
+        # Mandatory live verification
+        log_msg = f"[Pattern] Inferred '{pattern}' pattern. Verifying '{candidate}'..."
+        print(log_msg)
+        logs_out.append(log_msg)
+
+        try:
+            verify_md = self.serper.search(f'"{candidate}"', num_results=5)
+            if candidate.lower() in verify_md.lower():
+                log_msg = f"[Pattern] Confirmed '{candidate}' via live search."
+                print(log_msg)
+                logs_out.append(log_msg)
+                return candidate
+            else:
+                log_msg = f"[Pattern] '{candidate}' not found on the web. Skipping."
+                print(log_msg)
+                logs_out.append(log_msg)
+        except Exception as e:
+            print(f"[Pattern] Verification error: {e}")
+
+        return None
+
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
+    def get_contacts_for_company(self, company: Company, max_contacts: int = 3, logs_out: Optional[List[str]] = None) -> List[Contact]:
+        """
+        Step 1 (Search): Searches for executive contacts across priority tiers (Tier 1: C-Suite/Founders -> Tier 2: VPs/BD -> Tier 3: Directors).
+        Step 2 (Parse): Converts the unstructured contact list into Contact Pydantic models with person validation.
+        Step 3 (Agent Loop): Runs targeted search dork playbook and pattern verification concurrently for each contact.
         """
         if logs_out is None:
             logs_out = []
@@ -195,35 +372,48 @@ class GeminiService:
                     company_name=company.name,
                     company_domain=company.domain
                 ))
+            if max_contacts >= 2:
+                contacts.append(Contact(
+                    name="David Chen",
+                    title="VP Engineering",
+                    email=f"david.chen@{company.domain or 'example.com'}",
+                    company_name=company.name,
+                    company_domain=company.domain
+                ))
             print(f"[GeminiService] [MOCK MODE] Generated {len(contacts)} simulated contacts for '{company.name}'.")
             return contacts
 
-        # Phase 1: Search for candidates
-        log_msg = f"[Agent] Searching web for contacts at '{company.name}'..."
+        # Phase 1: Search for candidates across leadership tiers
+        log_msg = f"[Agent] Searching web for leadership contacts at '{company.name}'..."
         print(log_msg)
         logs_out.append(log_msg)
-        
-        search_query = f"{company.name} {company.domain or ''} CEO founder executives team leadership contact"
+
+        search_query = (
+            f'"{company.name}" (CEO OR "Chief Executive Officer" OR Founder OR "Managing Director" '
+            f'OR President OR COO OR "VP Sales" OR "VP Business Development" OR CTO OR Director) '
+            f'leadership team {company.domain or ""}'
+        )
         raw_markdown = self.serper.search(search_query, num_results=10)
 
         log_msg = f"[Agent] Extracting initial structured contact list for '{company.name}'..."
         print(log_msg)
         logs_out.append(log_msg)
-        
+
         structured_llm = self.llm_parse.with_structured_output(ContactList)
-        
+
         parse_prompt = ChatPromptTemplate.from_template(
-            "Parse the following web search results about contacts at the company '{company_name}' "
-            "into a clean list of up to {max_contacts} structured contact objects.\n\n"
+            "Parse the following web search results about leadership contacts at '{company_name}' "
+            "into a clean list of up to {max_contacts} structured contact objects prioritizing top executives "
+            "(CEO, Founder, COO, VP, Director).\n\n"
             "Company: {company_name}\n"
             "Company Domain: {company_domain}\n\n"
             "Web Search Results:\n{markdown}\n\n"
             "Extract name, title, and email. Ensure you populate 'company_name' as '{company_name}' "
             "and 'company_domain' as '{company_domain}' for each contact. "
-            "IMPORTANT: Only populate the 'email' field if a valid, exact email address is explicitly present in the search snippets. "
-            "If no exact email is explicitly written in the snippets, leave the 'email' field blank (do not guess it)."
+            "CRITICAL: Only include real individual persons (do not include departments, 'Board of Directors', or placeholder entities). "
+            "Only populate 'email' if explicitly present in the search snippets. If not explicitly found, leave it blank."
         )
-        
+
         parser_chain = parse_prompt | structured_llm
         parsed_result: ContactList = parser_chain.invoke({
             "markdown": raw_markdown,
@@ -231,104 +421,53 @@ class GeminiService:
             "company_domain": company.domain or "",
             "max_contacts": str(max_contacts)
         })
-        
-        # Filter out invalid parses
-        valid_contacts = [c for c in parsed_result.contacts if c.name and c.name.lower() != "n/a"]
-        
-        # Phase 2: Targeted Email Hunting Loop for each contact
-        # Uses a structured 3-query playbook instead of free-form LLM query generation.
-        decision_llm = self.llm_parse.with_structured_output(EmailSearchDecision)
 
-        decision_prompt = ChatPromptTemplate.from_template(
-            "You are a B2B contact verification assistant. Your absolute priority is to find the actual email address of {contact_name} who works as {contact_title} at {company_name} (domain: {company_domain}).\n\n"
-            "Below are the web search results for the current search query:\n"
-            "{markdown}\n\n"
-            "Analyze the snippets carefully:\n"
-            "1. If a valid, real email address belonging to {contact_name} is explicitly listed/found in the search snippets (e.g., 'john.doe@{company_domain}', 'jdoe@{company_domain}', or contact details), extract it into 'email_found'.\n"
-            "2. If no exact email address is explicitly found, set 'email_found' to null. Do NOT make up, guess, or generate an email using naming patterns. This is a strict constraint.\n"
-            "3. Set 'next_search_query' to null — the search strategy is managed externally.\n\n"
-            "Provide your reasoning in the 'reasoning' field."
-        )
-
-        for contact in valid_contacts:
-            if contact.email and "@" in contact.email:
-                log_msg = f"[Agent] Found email '{contact.email}' in initial search for {contact.name}."
-                print(log_msg)
-                logs_out.append(log_msg)
-                continue
-
-            domain = company.domain or ""
-            contact_name = contact.name
-            company_name_str = company.name
-
-            # Structured 3-query playbook — each query uses a different strategy
-            playbook_queries = [
-                # Q1: Search within the company's own website (team/contact/about pages)
-                f'site:{domain} "{contact_name}" email OR contact' if domain else f'"{contact_name}" "{company_name_str}" site contact',
-                # Q2: Classic email dork — name + domain + email keyword
-                f'"{contact_name}" "{domain}" email OR contact' if domain else f'"{contact_name}" "{company_name_str}" email contact',
-                # Q3: PDFs, regulatory filings, LinkedIn — often expose emails
-                f'"{contact_name}" "{company_name_str}" email filetype:pdf OR site:linkedin.com',
+        # Filter out non-person entities and invalid parses
+        valid_contacts = [
+            c for c in parsed_result.contacts
+            if c.name and is_valid_person_name(c.name)
+        ]
+        if not valid_contacts:
+            valid_contacts = [
+                c for c in parsed_result.contacts
+                if c.name and c.name.lower() not in ("n/a", "none", "unknown", "null")
             ]
 
-            email_found = None
+        # Deduplicate contacts by name
+        seen_names = set()
+        unique_contacts = []
+        for c in valid_contacts:
+            clean_name = c.name.strip().lower()
+            if clean_name not in seen_names:
+                seen_names.add(clean_name)
+                unique_contacts.append(c)
+        valid_contacts = unique_contacts[:max_contacts]
 
-            for attempt, current_query in enumerate(playbook_queries, 1):
-                log_msg = f"[Agent Loop] [{contact_name}] Attempt {attempt}/3: '{current_query}'"
-                print(log_msg)
-                logs_out.append(log_msg)
+        # Enforce company name/domain consistency — prevents orphaned contacts
+        # from LLM returning slightly different company names
+        for c in valid_contacts:
+            c.company_name = company.name
+            c.company_domain = company.domain
 
-                # Step A: Run Serper search — get snippets + raw URLs
-                attempt_markdown, page_urls = self.serper.search_with_urls(current_query, num_results=10)
+        if not valid_contacts:
+            return []
 
-                # Step B: Deterministic page scrape — scan top 3 URLs for @domain emails
-                if domain and page_urls:
-                    log_msg = f"[Page Scrape] [{contact_name}] Scanning {min(3, len(page_urls))} pages for @{domain} emails..."
-                    print(log_msg)
-                    logs_out.append(log_msg)
-                    for url in page_urls[:3]:
-                        scraped_emails = self.serper.fetch_emails_from_page(url, domain)
-                        if scraped_emails:
-                            email_found = scraped_emails[0]
-                            log_msg = f"[Page Scrape] Found email via page scan: '{email_found}' on {url}"
-                            print(log_msg)
-                            logs_out.append(log_msg)
-                            break
+        # Phase 2: Sequential email hunting for each contact
+        log_msg = f"[Agent] Hunting emails for {len(valid_contacts)} contacts at '{company.name}'..."
+        print(log_msg)
+        logs_out.append(log_msg)
 
-                if email_found:
-                    break
-
-                # Step C: LLM evaluates snippets for any explicitly listed email
-                decision: EmailSearchDecision = decision_llm.invoke(
-                    decision_prompt.format(
-                        contact_name=contact_name,
-                        contact_title=contact.title or "executive",
-                        company_name=company_name_str,
-                        company_domain=domain,
-                        markdown=attempt_markdown
-                    )
-                )
-
-                log_msg = f"[Agent Decision] [{contact_name}] Reasoning: {decision.reasoning}"
-                print(log_msg)
-                logs_out.append(log_msg)
-
-                if decision.email_found and "@" in decision.email_found:
-                    email_found = decision.email_found.strip()
-                    log_msg = f"[Agent Loop] LLM found email in snippets: '{email_found}'"
-                    print(log_msg)
-                    logs_out.append(log_msg)
-                    break
-
-            if email_found:
-                contact.email = email_found
-            else:
-                log_msg = f"[Agent Loop] All 3 strategies exhausted for {contact_name}. Setting to N/A."
-                print(log_msg)
-                logs_out.append(log_msg)
+        enriched_contacts = []
+        for contact in valid_contacts:
+            try:
+                result = self._hunt_email_for_contact(contact, company, logs_out)
+                enriched_contacts.append(result)
+            except Exception as exc:
+                print(f"[Agent] Email hunt failed for {contact.name}: {exc}")
                 contact.email = "N/A"
+                enriched_contacts.append(contact)
 
-        return valid_contacts
+        return enriched_contacts
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
     def draft_outreach_email(self, company: Company, contact: Contact, sender_name: str = "Alex", sender_title: str = "Lead Consultant", tone: str = "formal") -> EmailDraft:

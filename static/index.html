@@ -1,262 +1,252 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lead-Gen Agent — Autonomous B2B Prospecting</title>
-    <meta name="description" content="Autonomous B2B lead mining, contact discovery, and outreach generation pipeline powered by LangGraph and Gemini.">
-    <!-- Google Fonts: Newsreader (Anthropic Tiempos-Style Serif), Plus Jakarta Sans (Modern UI), JetBrains Mono (Technical Monospace) -->
+    <title>Lead-Gen Console — Prospecting Instrument Panel</title>
+    <meta name="description" content="Operator console for B2B lead generation, executive contact discovery, and outreach pipeline management.">
+    <!-- Google Fonts: IBM Plex Mono (Data & Tabular Figures), Inter (UI Chrome & Body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=7">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
-    <div class="app-wrapper">
+    <div class="console-shell">
 
-        <!-- ============================================
-             01. HERO HEADER
-             ============================================ -->
-        <header class="app-header">
-            <div class="header-inner">
-
-                <h1 class="hero-headline">
-                    Lead Generation <span class="gradient-text">Agent</span>
-                </h1>
-                <p class="hero-subtitle">
-                    Executive contact discovery
-                </p>
+        <!-- CONSOLE TOPBAR -->
+        <header class="console-topbar">
+            <div class="topbar-brand">
+                <span class="brand-square"></span>
+                <span class="brand-title">PROSPECTING CONSOLE</span>
+                <span class="brand-version">v2.5</span>
             </div>
-            <div class="header-actions">
-                <button class="theme-toggle-btn" id="theme-toggle" aria-label="Toggle light and dark theme">
-                    <span class="theme-icon sun-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                    </span>
-                    <span class="theme-icon moon-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                    </span>
-                    <span class="theme-label">Theme</span>
+            <div class="topbar-meta">
+                <div class="status-indicator idle" id="status-badge" aria-live="polite">
+                    <span class="status-dot"></span>
+                    <span class="status-text">IDLE</span>
+                </div>
+                <div class="thread-badge" id="thread-badge-wrap" title="Active Thread Session">
+                    <span class="meta-label">RUN:</span>
+                    <code class="thread-code" id="active-thread-id">NONE</code>
+                </div>
+                <button class="theme-toggle-btn" id="theme-toggle" type="button" aria-label="Toggle theme mode">
+                    <span class="theme-label" id="theme-label">DARK</span>
                 </button>
             </div>
         </header>
 
-        <!-- ============================================
-             MAIN GRID LAYOUT: Left (Control) + Right (Output)
-             ============================================ -->
-        <main class="app-main">
+        <!-- MAIN LAYOUT GRID -->
+        <div class="console-body">
 
-            <!-- LEFT CONTROL COLUMN -->
-            <section class="control-column">
+            <!-- CONTROL & MONITOR PANEL (SIDEBAR) -->
+            <aside class="panel-control">
+                
+                <!-- PIPELINE CONFIGURATION FORM -->
+                <div class="panel-section">
+                    <div class="section-header">
+                        <h2 class="section-title">01 / PIPELINE PARAMETERS</h2>
+                    </div>
 
-                <!-- 02. CONFIGURE CARD -->
-                <div class="card-elevated config-card">
-
-                    <h2 class="card-title">Launch Pipeline</h2>
-                    <p class="card-desc">Define your target industry niche, location parameters, and sender identity.</p>
-
-                    <form id="run-form" autocomplete="off">
+                    <form id="run-form" autocomplete="off" novalidate>
                         <div class="form-group">
-                            <label class="form-label" for="niche">Target Industry / Niche</label>
-                            <input class="form-input" type="text" id="niche" placeholder="e.g. Fintech startups, DevOps consultancies" required>
+                            <label class="form-label" for="niche">TARGET NICHE / INDUSTRY</label>
+                            <input class="form-input" type="text" id="niche" placeholder="e.g. Fintech Startups, DevOps Consultancies" required>
                         </div>
 
-                        <div class="form-row">
+                        <div class="form-grid-2">
                             <div class="form-group">
-                                <label class="form-label" for="sender-name">Your Name</label>
-                                <input class="form-input" type="text" id="sender-name" placeholder="Alex" value="Alex" required>
+                                <label class="form-label" for="location">LOCATION</label>
+                                <input class="form-input" type="text" id="location" value="India" placeholder="e.g. India, USA" required>
                             </div>
                             <div class="form-group">
-                                <label class="form-label" for="sender-title">Your Designation</label>
-                                <input class="form-input" type="text" id="sender-title" placeholder="Lead Consultant" value="Lead Consultant" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label" for="location">Location</label>
-                                <input class="form-input" type="text" id="location" placeholder="e.g. India, Pune, Mumbai" value="India" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="limit">Limit (Max Companies)</label>
+                                <label class="form-label" for="limit">MAX COMPANIES</label>
                                 <input class="form-input" type="number" id="limit" min="1" max="10" value="3" required>
                             </div>
                         </div>
 
-                        <div class="form-row">
+                        <div class="form-grid-2">
                             <div class="form-group">
-                                <label class="form-label" for="min-revenue">Min Revenue</label>
-                                <input class="form-input" type="text" id="min-revenue" placeholder="e.g. ₹10 Cr (Optional)">
+                                <label class="form-label" for="sender-name">SENDER NAME</label>
+                                <input class="form-input" type="text" id="sender-name" value="Alex" required>
                             </div>
                             <div class="form-group">
-                                <label class="form-label" for="max-revenue">Max Revenue</label>
-                                <input class="form-input" type="text" id="max-revenue" placeholder="e.g. ₹100 Cr (Optional)">
+                                <label class="form-label" for="sender-title">SENDER TITLE</label>
+                                <input class="form-input" type="text" id="sender-title" value="Lead Consultant" required>
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="min-revenue">MIN REVENUE (OPTIONAL)</label>
+                                <input class="form-input" type="text" id="min-revenue" placeholder="e.g. ₹10 Cr">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="max-revenue">MAX REVENUE (OPTIONAL)</label>
+                                <input class="form-input" type="text" id="max-revenue" placeholder="e.g. ₹100 Cr">
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="outreach-tone">Outreach Tone</label>
-                            <select class="form-input" id="outreach-tone">
-                                <option value="formal" selected>Formal</option>
-                                <option value="conversational">Conversational</option>
-                                <option value="bold">Bold</option>
+                            <label class="form-label" for="outreach-tone">OUTREACH TONE</label>
+                            <select class="form-input select-input" id="outreach-tone">
+                                <option value="formal" selected>Formal / Executive</option>
+                                <option value="conversational">Conversational / Warm</option>
+                                <option value="bold">Bold / Direct</option>
                             </select>
                         </div>
 
-                        <button type="submit" class="btn-primary" id="submit-btn">
-                            <span class="btn-label">Execute Pipeline</span>
-                            <span class="btn-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                            </span>
-                            <span class="spinner"></span>
+                        <button type="submit" class="btn-execute" id="submit-btn">
+                            <span class="btn-text">EXECUTE PIPELINE</span>
                         </button>
                     </form>
                 </div>
 
-                <!-- 03. MONITOR (INVERTED DARK SECTION) -->
-                <div class="card-dark monitor-card">
-                    <div class="monitor-top-bar">
-                        <div></div>
-                        <div class="status-badge idle" id="status-badge">
-                            <span class="status-dot"></span>
-                            <span class="status-text">Idle</span>
+                <!-- PIPELINE MONITOR & STEP TRACKER -->
+                <div class="panel-section monitor-section">
+                    <div class="section-header">
+                        <h2 class="section-title">02 / WORKFLOW MONITOR</h2>
+                    </div>
+
+                    <!-- REFINEMENT 3: STEP SEQUENCE TRACKER WITH IN-PROGRESS & COMPLETED STATES -->
+                    <div class="pipeline-tracker">
+                        <div class="tracker-step" id="step-search">
+                            <div class="step-main">
+                                <span class="step-code">01</span>
+                                <span class="step-label">search_companies</span>
+                            </div>
+                            <span class="step-meta" id="step-search-meta">Pending</span>
+                        </div>
+                        <div class="tracker-step" id="step-contacts">
+                            <div class="step-main">
+                                <span class="step-code">02</span>
+                                <span class="step-label">get_contacts</span>
+                            </div>
+                            <span class="step-meta" id="step-contacts-meta">Pending</span>
+                        </div>
+                        <div class="tracker-step" id="step-draft">
+                            <div class="step-main">
+                                <span class="step-code">03</span>
+                                <span class="step-label">draft_emails</span>
+                            </div>
+                            <span class="step-meta" id="step-draft-meta">Pending</span>
                         </div>
                     </div>
 
-                    <div class="thread-info-row">
-                        <span class="thread-label">Thread ID</span>
-                        <code class="thread-code" id="active-thread-id">&mdash;</code>
+                    <!-- COMPLETED COMPACT SUMMARY BANNER -->
+                    <div class="pipeline-summary-banner" id="summary-banner">
+                        <span class="summary-title">PIPELINE COMPLETE ✓</span>
+                        <span id="summary-banner-text">All workflow stages executed successfully.</span>
                     </div>
 
-                    <!-- Pipeline Steps -->
-                    <div class="pipeline-steps">
-                        <div class="pipeline-step" id="step-search">
-                            <span class="step-num">01</span>
-                            <span class="step-name">search_companies</span>
+                    <!-- PROGRESS BAR TRACK -->
+                    <div class="progress-container" id="progress-wrap">
+                        <div class="progress-track">
+                            <div class="progress-bar" id="progress-fill"></div>
                         </div>
-                        <div class="pipeline-step" id="step-contacts">
-                            <span class="step-num">02</span>
-                            <span class="step-name">get_contacts</span>
-                        </div>
-                        <div class="pipeline-step" id="step-draft">
-                            <span class="step-num">03</span>
-                            <span class="step-name">draft_emails</span>
+                        <div class="progress-status">
+                            <span class="progress-detail" id="progress-label">Ready for execution.</span>
                         </div>
                     </div>
 
-                    <!-- Progress Bar -->
-                    <div class="progress-bar-wrap" id="progress-wrap" style="display: none;">
-                        <div class="progress-bar-track">
-                            <div class="progress-bar-fill" id="progress-fill"></div>
+                    <!-- LOG CONSOLE DISCLOSURE (COLLAPSED BY DEFAULT) -->
+                    <details class="console-disclosure" id="log-disclosure">
+                        <summary class="disclosure-summary">
+                            <span>VIEW SYSTEM LOGS</span>
+                            <span class="log-count-tag" id="log-count">0 LINES</span>
+                        </summary>
+                        <div class="terminal-body" id="console-logs">
+                            <div class="terminal-line muted">System ready. Awaiting pipeline run...</div>
                         </div>
-                        <span class="progress-label" id="progress-label">Initializing...</span>
-                    </div>
-
-                    <!-- Log Console -->
-                    <div class="console-box" id="console-logs">
-                        <div class="console-placeholder">Awaiting pipeline execution...</div>
-                    </div>
+                    </details>
                 </div>
 
-            </section>
+            </aside>
 
-            <!-- RIGHT OUTPUT COLUMN -->
-            <section class="output-column">
-                <div class="card-elevated output-card">
-                    <div class="output-header">
-                        <div>
-                            <h2 class="card-title">Discovered Leads</h2>
-                            <div class="output-sub-row">
-                                <p class="output-count" id="lead-count-label">No records</p>
-                                <span class="dot-separator">&bull;</span>
-                                <p class="sheets-notice">
-                                    Results auto-sync to <a href="https://docs.google.com/spreadsheets/d/1ZqfvslHP_jpQyKooohvqpUamq1EUvQoi0YXNfUTZ3ig/edit" target="_blank" rel="noopener" class="sheets-link">Google Sheets ↗</a>
-                                </p>
-                            </div>
-                        </div>
-                        <button class="btn-outline" id="download-btn" disabled>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                            Export CSV
+            <!-- RESULTS HERO PANEL (DATA TABLE) -->
+            <main class="panel-results">
+                <div class="results-header">
+                    <div class="results-title-group">
+                        <h1 class="results-heading">DISCOVERED LEADS</h1>
+                        <span class="lead-count-badge" id="lead-count-label">0 RECORDS</span>
+                    </div>
+                    <div class="results-actions">
+                        <a href="https://docs.google.com/spreadsheets/d/1ZqfvslHP_jpQyKooohvqpUamq1EUvQoi0YXNfUTZ3ig/edit" 
+                           target="_blank" 
+                           rel="noopener" 
+                           class="link-sheets-sync" 
+                           title="Google Sheets Lead Sheet">
+                           <span>SYNCED TO GOOGLE SHEETS</span> ↗
+                        </a>
+                        <button class="btn-export" id="download-btn" disabled type="button">
+                            <span>EXPORT CSV</span>
                         </button>
                     </div>
-
-                    <div class="table-wrap">
-                        <table id="leads-table">
-                            <thead>
-                                <tr>
-                                    <th>Company</th>
-                                    <th>Industry</th>
-                                    <th>Contact</th>
-                                    <th>Email</th>
-                                    <th>Outreach</th>
-                                </tr>
-                            </thead>
-                            <tbody id="leads-tbody">
-                                <tr>
-                                    <td colspan="5" class="empty-state">
-                                        <div class="empty-content">
-                                            <span class="empty-icon">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                            </span>
-                                            <p>No records found yet. Configure parameters and run the pipeline to discover leads.</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
-            </section>
 
-        </main>
+                <!-- TABLE CONTAINER -->
+                <div class="table-scroll-wrap">
+                    <table class="leads-data-table" id="leads-table">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="col-company">COMPANY &amp; DOMAIN</th>
+                                <th scope="col" class="col-industry">INDUSTRY</th>
+                                <th scope="col" class="col-contact">STAKEHOLDER</th>
+                                <th scope="col" class="col-email">EMAIL ADDRESS</th>
+                                <th scope="col" class="col-action">OUTREACH DRAFT</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leads-tbody">
+                            <tr>
+                                <td colspan="5" class="table-empty-cell">
+                                    <div class="empty-state-box">
+                                        <span class="empty-code">NO DATA AVAILABLE</span>
+                                        <p class="empty-msg">Configure execution parameters in Panel 01 and trigger the pipeline to discover decision-makers.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+
+        </div>
     </div>
 
-    <!-- ============================================
-         EMAIL OUTREACH MODAL
-         ============================================ -->
-    <div class="modal-overlay" id="email-modal" role="dialog" aria-modal="true" aria-label="Email draft preview">
-        <div class="modal-backdrop" id="modal-backdrop"></div>
-        <div class="modal-card">
+    <!-- INSPECTOR MODAL FOR OUTREACH COPY -->
+    <div class="modal-backdrop" id="email-modal" role="dialog" aria-modal="true" aria-labelledby="modal-headline">
+        <div class="modal-box">
             <div class="modal-header">
-                <div>
-                    <div class="section-pill">
-                        <span class="pill-dot"></span>
-                        <span class="pill-text">CATENON OUTREACH DRAFT</span>
-                    </div>
-                    <h3 class="modal-title">Generated Email Copy</h3>
+                <div class="modal-title-wrap">
+                    <span class="modal-tag">OUTREACH DRAFT INSPECTOR</span>
+                    <h3 class="modal-headline" id="modal-headline">Generated Email Copy</h3>
                 </div>
-                <button class="modal-close" id="modal-close-btn" aria-label="Close modal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
+                <button class="modal-close-btn" id="modal-close-btn" type="button" aria-label="Close modal">✕</button>
             </div>
 
             <div class="modal-body">
-                <div class="email-meta-grid">
-                    <div class="email-meta-item">
-                        <span class="meta-label">TO</span>
-                        <span class="meta-val" id="modal-email-to"></span>
-                    </div>
-                    <div class="email-meta-item">
-                        <span class="meta-label">SUBJECT</span>
-                        <span class="meta-val subject-highlight" id="modal-email-subject"></span>
-                    </div>
+                <div class="meta-field">
+                    <span class="meta-key">RECIPIENT EMAIL:</span>
+                    <code class="meta-val" id="modal-email-to">N/A</code>
                 </div>
-                <div class="email-content-box">
+                <div class="meta-field">
+                    <span class="meta-key">SUBJECT LINE:</span>
+                    <span class="meta-val subject-val" id="modal-email-subject">N/A</span>
+                </div>
+                <div class="email-body-container">
                     <pre class="email-body-text" id="modal-email-body"></pre>
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button class="btn-secondary" id="modal-cancel-btn">Close</button>
-                <button class="btn-primary" id="copy-email-btn">
-                    <span class="btn-label">Copy Draft</span>
-                    <span class="btn-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                    </span>
+                <button class="btn-modal-cancel" id="modal-cancel-btn" type="button">CLOSE</button>
+                <button class="btn-modal-copy" id="copy-email-btn" type="button">
+                    <span id="copy-btn-text">COPY DRAFT TEXT</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=11"></script>
 </body>
 </html>

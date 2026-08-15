@@ -2,7 +2,111 @@ import re
 import requests
 from typing import List, Dict, Any, Tuple
 
+import urllib.parse
+
 EMAIL_REGEX = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
+
+# Common generic / department inbox prefixes that should NOT be attributed to individual executives
+GENERIC_EMAIL_PREFIXES = {
+    "info", "support", "sales", "contact", "careers", "jobs", "press", "media",
+    "admin", "help", "billing", "privacy", "legal", "office", "hello", "team",
+    "inquiries", "inquiry", "general", "marketing", "hr", "recruitment", "security",
+    "compliance", "feedback", "service", "customerservice", "donotreply", "noreply",
+    "postmaster", "webmaster", "abuse", "frontdesk", "reception"
+}
+
+
+def is_generic_email(email: str) -> bool:
+    """Checks if an email prefix is a generic department inbox (e.g., info@, sales@)."""
+    if not email or "@" not in email:
+        return False
+    local_part = email.split("@")[0].lower().strip()
+    return local_part in GENERIC_EMAIL_PREFIXES
+
+
+def is_matching_contact_email(email: str, contact_name: str) -> bool:
+    """
+    Heuristically checks if an email matches the given contact's name.
+    Verifies first name, last name, or initials in the local part of the address.
+    """
+    if not email or not contact_name or "@" not in email:
+        return False
+    
+    local_part = email.split("@")[0].lower().replace(".", "").replace("_", "").replace("-", "")
+    name_clean = re.sub(r'[^a-zA-Z\s]', '', contact_name).lower().strip()
+    tokens = [t for t in name_clean.split() if len(t) > 1]
+    
+    if not tokens:
+        return False
+        
+    first_name = tokens[0]
+    last_name = tokens[-1] if len(tokens) > 1 else ""
+    
+    # 1. Exact first or last name in local part
+    if first_name in local_part:
+        return True
+    if last_name and last_name in local_part:
+        return True
+        
+    # 2. First initial + last name (e.g. jdoe for John Doe)
+    if last_name and (first_name[0] + last_name) in local_part:
+        return True
+        
+    # 3. First name + last initial (e.g. johnd for John Doe)
+    if last_name and (first_name + last_name[0]) in local_part:
+        return True
+
+    return False
+
+
+def extract_emails_from_text(text: str, target_domain: str = "", filter_generic: bool = True) -> List[str]:
+    """
+    Extracts, de-obfuscates, and normalizes email addresses from any text/HTML snippet.
+    Optionally filters by domain and excludes generic inboxes.
+    """
+    if not text:
+        return []
+        
+    found_emails = set()
+    
+    # 1. URL-decode text to catch encoded mailto: and query strings
+    try:
+        decoded_text = urllib.parse.unquote(text)
+    except Exception:
+        decoded_text = text
+
+    # 2. Extract standard emails from original decoded text
+    for match in EMAIL_REGEX.findall(decoded_text):
+        email_clean = match.lower().strip().rstrip(".")
+        found_emails.add(email_clean)
+
+    # 3. De-obfuscate common web obfuscations:
+    # Safely replace [at], (at), {at} with '@', and [dot], (dot), {dot} with '.'
+    # NOTE: Only matches bracketed forms — bare 'at'/'dot' words are NOT matched to avoid
+    # false positives from normal English like "reach our founder at sarah.jenkins"
+    deobf_text = re.sub(r'\s*(?:\[\s*(?:at|@)\s*\]|\(\s*(?:at|@)\s*\)|\{\s*(?:at|@)\s*\})\s*', '@', decoded_text, flags=re.IGNORECASE)
+    deobf_text = re.sub(r'\s*(?:\[\s*(?:dot|\.)\s*\]|\(\s*(?:dot|\.)\s*\)|\{\s*(?:dot|\.)\s*\})\s*', '.', deobf_text, flags=re.IGNORECASE)
+
+    for match in EMAIL_REGEX.findall(deobf_text):
+        email_clean = match.lower().strip().rstrip(".")
+        found_emails.add(email_clean)
+        
+    # 4. Domain & Generic Filtering
+    results = []
+    for email in found_emails:
+        if filter_generic and is_generic_email(email):
+            continue
+        if target_domain:
+            clean_target = target_domain.lower().replace("www.", "").strip()
+            email_domain = email.split("@")[-1].lower().strip()
+            # Match exact domain or subdomain
+            if email_domain == clean_target or email_domain.endswith(f".{clean_target}"):
+                results.append(email)
+        else:
+            results.append(email)
+            
+    return results
+
 
 SERPER_API_URL = "https://google.serper.dev/search"
 
@@ -81,36 +185,39 @@ class SerperService:
         urls = [r.get("link", "") for r in data.get("organic", []) if r.get("link")]
         return markdown, urls
 
-    def fetch_emails_from_page(self, url: str, target_domain: str) -> List[str]:
+    def fetch_emails_from_page(self, url: str, target_domain: str, contact_name: str = "") -> List[str]:
         """
         Fetches a web page and extracts all email addresses matching @target_domain
-        using a regex scan over the full HTML body.
-        This is deterministic — no LLM involved, zero hallucination risk.
+        using regex scan and de-obfuscation over the full HTML body.
+        Excludes generic inboxes and prioritizes emails matching contact_name.
 
         Args:
             url: The full URL to fetch.
             target_domain: Only return emails ending with this domain (e.g., 'tata.com').
+            contact_name: Optional contact name to prioritize/match.
 
         Returns:
-            A deduplicated list of found email addresses.
+            A prioritized, deduplicated list of found email addresses.
         """
         try:
             resp = requests.get(
                 url,
                 timeout=6,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; LeadAgentBot/1.0)"},
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"},
                 allow_redirects=True
             )
             if resp.status_code != 200:
                 return []
 
-            all_emails = EMAIL_REGEX.findall(resp.text)
-            # Filter to only emails belonging to the target domain
-            domain_emails = [
-                e.lower() for e in all_emails
-                if e.lower().endswith(f"@{target_domain.lower()}")
-            ]
-            return list(set(domain_emails))
+            extracted = extract_emails_from_text(resp.text, target_domain=target_domain, filter_generic=True)
+            
+            if contact_name and extracted:
+                # Prioritize emails that match the contact's name
+                matching = [e for e in extracted if is_matching_contact_email(e, contact_name)]
+                if matching:
+                    return matching
+                    
+            return extracted
 
         except Exception as exc:
             print(f"[SerperService] Page fetch failed for {url}: {exc}")

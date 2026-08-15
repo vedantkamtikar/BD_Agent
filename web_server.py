@@ -126,6 +126,16 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
                 unique_companies.append(comp)
         companies_obj = unique_companies
 
+        # Deduplicate contacts by (name, company_name)
+        seen_contact_keys = set()
+        unique_contacts = []
+        for c in contacts_obj:
+            key = (c.name.strip().lower(), c.company_name.strip().lower())
+            if key not in seen_contact_keys:
+                seen_contact_keys.add(key)
+                unique_contacts.append(c)
+        contacts_obj = unique_contacts
+
         # Persist to Google Sheets
         with runs_lock:
             runs_db[thread_id]["logs"].append(

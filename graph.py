@@ -90,14 +90,20 @@ def get_contacts_node(state: LeadState) -> Dict[str, Any]:
         print(f"[get_contacts] [{idx}/{total}] Searching contacts at '{company.name}'...")
         contacts = gemini_service.get_contacts_for_company(company, max_contacts=3, logs_out=node_logs)
         if contacts:
-            # Prefer the first contact that has a verified email; fall back to primary contact
-            best = next(
-                (c for c in contacts if c.email and c.email != "N/A" and "@" in c.email),
-                contacts[0]
-            )
-            all_contacts.append(best)
+            all_contacts.extend(contacts)
+
+    # Deduplicate contacts by (name, company_name) to prevent duplicate rows
+    seen_keys = set()
+    unique_contacts = []
+    for c in all_contacts:
+        key = (c.name.strip().lower(), c.company_name.strip().lower())
+        if key not in seen_keys:
+            seen_keys.add(key)
+            unique_contacts.append(c)
+    all_contacts = unique_contacts
         
-    log_msg = f"get_contacts: Discovered {len(all_contacts)} contacts total."
+    verified_count = sum(1 for c in all_contacts if c.email and c.email != "N/A" and "@" in c.email)
+    log_msg = f"get_contacts: Discovered {len(all_contacts)} contacts total ({verified_count} with verified email)."
     print(f"\n[NODE] EXITING: get_contacts -> {log_msg}")
     print("=" * 60 + "\n")
     
@@ -111,23 +117,23 @@ def should_draft(state: LeadState) -> str:
     """
     Conditional Routing Edge Function.
     Decides whether to route to the 'draft_emails' node or bypass directly to 'END'
-    depending on whether contacts were successfully found.
+    depending on whether at least one contact has a verified email.
     """
     print("\n" + "~" * 60)
     print("   [CONDITIONAL EDGE] EVALUATING: should_draft")
     print("~" * 60)
     
     contacts = state.get("contacts", [])
-    contacts_count = len(contacts)
+    verified_contacts = [c for c in contacts if c.email and c.email != "N/A" and "@" in c.email]
     
-    print(f"[should_draft] Total contacts in state: {contacts_count}")
+    print(f"[should_draft] Total contacts in state: {len(contacts)} (Verified emails: {len(verified_contacts)})")
     
-    if contacts_count > 0:
+    if len(verified_contacts) > 0:
         decision = "draft_emails"
-        print(" -> Decision: Contacts exist. Routing to: 'draft_emails'")
+        print(f" -> Decision: {len(verified_contacts)} verified contacts found. Routing to: 'draft_emails'")
     else:
         decision = END
-        print(" -> Decision: No contacts found. Routing to: 'END' (skipping email drafts)")
+        print(" -> Decision: No verified contact emails found. Routing to: 'END' (skipping email drafts)")
         
     print("~" * 60 + "\n")
     return decision

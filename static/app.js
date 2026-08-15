@@ -1,66 +1,81 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // --- DOM References ---
+    // --- DOM REFERENCES ---
     const form          = document.getElementById("run-form");
     const submitBtn     = document.getElementById("submit-btn");
-    const btnLabel      = submitBtn.querySelector(".btn-label");
+    const btnText       = submitBtn.querySelector(".btn-text");
     const badge         = document.getElementById("status-badge");
     const badgeText     = badge.querySelector(".status-text");
     const threadCode    = document.getElementById("active-thread-id");
     const consoleLogs   = document.getElementById("console-logs");
+    const logCountTag   = document.getElementById("log-count");
     const tbody         = document.getElementById("leads-tbody");
     const downloadBtn   = document.getElementById("download-btn");
     const countLabel    = document.getElementById("lead-count-label");
 
-    // Progress bar
+    // Progress & Summary Banner
     const progressWrap  = document.getElementById("progress-wrap");
     const progressFill  = document.getElementById("progress-fill");
     const progressLabel = document.getElementById("progress-label");
+    const summaryBanner = document.getElementById("summary-banner");
+    const summaryText   = document.getElementById("summary-banner-text");
 
-    // Pipeline steps
-    const stepSearch   = document.getElementById("step-search");
-    const stepContacts = document.getElementById("step-contacts");
-    const stepDraft    = document.getElementById("step-draft");
-    const allSteps     = [stepSearch, stepContacts, stepDraft];
+    // Pipeline step elements
+    const stepSearch       = document.getElementById("step-search");
+    const stepSearchMeta   = document.getElementById("step-search-meta");
+    const stepContacts     = document.getElementById("step-contacts");
+    const stepContactsMeta = document.getElementById("step-contacts-meta");
+    const stepDraft        = document.getElementById("step-draft");
+    const stepDraftMeta    = document.getElementById("step-draft-meta");
+    const allSteps         = [stepSearch, stepContacts, stepDraft];
 
     // Modal
     const modal        = document.getElementById("email-modal");
     const modalClose   = document.getElementById("modal-close-btn");
     const modalCancel  = document.getElementById("modal-cancel-btn");
-    const modalBack    = document.getElementById("modal-backdrop");
     const modalTo      = document.getElementById("modal-email-to");
     const modalSubject = document.getElementById("modal-email-subject");
     const modalBody    = document.getElementById("modal-email-body");
     const copyBtn      = document.getElementById("copy-email-btn");
+    const copyBtnText  = document.getElementById("copy-btn-text");
 
     const themeToggle  = document.getElementById("theme-toggle");
+    const themeLabel   = document.getElementById("theme-label");
 
     let pollId = null;
     let logCount = 0;
+    let currentLeads = [];
 
-    // Initialize Theme (Light / Dark)
+    // Initialize Theme
     initTheme();
 
     if (themeToggle) {
         themeToggle.addEventListener("click", () => {
-            const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+            const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
             const newTheme = currentTheme === "dark" ? "light" : "dark";
-            document.documentElement.setAttribute("data-theme", newTheme);
-            localStorage.setItem("theme-preference", newTheme);
+            setTheme(newTheme);
         });
+    }
+
+    function setTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("theme-preference", theme);
+        if (themeLabel) {
+            themeLabel.textContent = theme.toUpperCase();
+        }
     }
 
     function initTheme() {
         const savedTheme = localStorage.getItem("theme-preference");
         if (savedTheme) {
-            document.documentElement.setAttribute("data-theme", savedTheme);
-        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            document.documentElement.setAttribute("data-theme", "dark");
+            setTheme(savedTheme);
+        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+            setTheme("light");
         } else {
-            document.documentElement.setAttribute("data-theme", "light");
+            setTheme("dark");
         }
     }
 
-    // Load existing leads on init
+    // Load initial lead records
     loadLeads();
 
     // -------------------------------------------------------
@@ -77,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const senderName = document.getElementById("sender-name").value.trim();
         const senderTitle = document.getElementById("sender-title").value.trim();
         const tone       = document.getElementById("outreach-tone").value;
+
         if (!niche) return;
 
         setLoading(true);
@@ -84,6 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
         clearConsole();
         resetSteps();
         resetProgress();
+        if (summaryBanner) summaryBanner.classList.remove("show");
         logCount = 0;
 
         try {
@@ -101,19 +118,24 @@ document.addEventListener("DOMContentLoaded", () => {
                     tone
                 })
             });
-            if (!res.ok) throw new Error("Failed to start pipeline.");
+            if (!res.ok) throw new Error("Failed to initialize pipeline.");
             const data = await res.json();
-            threadCode.textContent = data.thread_id;
+            
+            // Format shortened thread ID for clean operator UI display
+            const shortId = data.thread_id ? data.thread_id.slice(0, 8).toUpperCase() : "ACTIVE";
+            threadCode.textContent = `#${shortId}`;
+            threadCode.title = `Full Thread ID: ${data.thread_id}`;
+
             startPolling(data.thread_id);
         } catch (err) {
-            log(err.message, "error");
+            log(`[ERROR] ${err.message}`, "error");
             setBadge("failed");
             setLoading(false);
         }
     });
 
     // -------------------------------------------------------
-    // POLLING
+    // STATUS POLLING
     // -------------------------------------------------------
     function startPolling(threadId) {
         if (pollId) clearInterval(pollId);
@@ -121,10 +143,10 @@ document.addEventListener("DOMContentLoaded", () => {
         pollId = setInterval(async () => {
             try {
                 const res = await fetch(`/api/status/${threadId}`);
-                if (!res.ok) throw new Error("Poll failed.");
+                if (!res.ok) throw new Error("Status query failed.");
                 const data = await res.json();
 
-                // Append new log lines
+                // Append logs
                 if (data.logs && data.logs.length > logCount) {
                     for (let i = logCount; i < data.logs.length; i++) {
                         const line = data.logs[i];
@@ -135,24 +157,24 @@ document.addEventListener("DOMContentLoaded", () => {
                         log(line, cls);
                     }
                     logCount = data.logs.length;
+                    if (logCountTag) logCountTag.textContent = `${logCount} LINES`;
                 }
 
-                // Pipeline step visuals
-                updateSteps(data.logs || []);
+                // Update step indicators & progress
+                updateSteps(data.logs || [], data);
 
-                // Progress bar update
                 if (data.progress) {
                     updateProgress(data.progress);
                 }
 
-                // Terminal states
+                // Handle completion or failure
                 if (data.status === "completed") {
                     clearInterval(pollId);
                     setBadge("completed");
                     setLoading(false);
-                    doneAllSteps();
-                    completeProgress();
-                    // Load leads from the completed run
+                    doneAllSteps(data);
+                    completeProgress(data);
+
                     if (data.lead_rows && data.lead_rows.length) {
                         renderTable(data.lead_rows);
                     } else {
@@ -162,7 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     clearInterval(pollId);
                     setBadge("failed");
                     setLoading(false);
-                    log(`Failure: ${data.error || "Unknown error"}`, "error");
+                    log(`[FATAL] ${data.error || "Execution error"}`, "error");
                 }
             } catch (err) {
                 console.error("Poll error:", err);
@@ -171,7 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // -------------------------------------------------------
-    // LEADS TABLE
+    // LEADS DATA TABLE RENDERER (STRICT ROW HEIGHT & DRAFT LINK)
     // -------------------------------------------------------
     async function loadLeads() {
         try {
@@ -180,64 +202,78 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
             renderTable(data.leads || []);
         } catch (err) {
-            console.error("loadLeads:", err);
+            console.error("loadLeads error:", err);
         }
     }
-
-    let currentLeads = [];
 
     function renderTable(leads) {
         currentLeads = leads || [];
         if (!currentLeads.length) {
-            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">
-                <span class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
-                No records. Execute the pipeline to populate.</td></tr>`;
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="table-empty-cell">
+                        <div class="empty-state-box">
+                            <span class="empty-code">NO DATA AVAILABLE</span>
+                            <p class="empty-msg">Configure execution parameters in Panel 01 and trigger the pipeline to discover decision-makers.</p>
+                        </div>
+                    </td>
+                </tr>`;
             downloadBtn.disabled = true;
-            countLabel.textContent = "No records";
+            countLabel.textContent = "0 RECORDS";
             return;
         }
 
         downloadBtn.disabled = false;
-        countLabel.textContent = `${currentLeads.length} lead${currentLeads.length !== 1 ? "s" : ""} recorded`;
+        countLabel.textContent = `${currentLeads.length} RECORD${currentLeads.length !== 1 ? "S" : ""}`;
         tbody.innerHTML = "";
 
-        [...currentLeads].reverse().forEach((lead, i) => {
+        [...currentLeads].reverse().forEach((lead) => {
             const tr = document.createElement("tr");
-            tr.style.animationDelay = `${i * 30}ms`;
 
-            const compName = esc(lead["Company Name"] || "");
+            const compName = esc(lead["Company Name"] || "N/A");
             const domain = lead["Company Domain"];
-            const domainHtml = domain && domain !== "N/A"
-                ? `<a href="https://${domain}" target="_blank" rel="noopener" class="table-link">${domain}</a>`
-                : "";
+            const domainHtml = (domain && domain !== "N/A")
+                ? `<a href="https://${domain}" target="_blank" rel="noopener" class="domain-link" title="${esc(domain)}">${esc(domain)}</a>`
+                : `<span class="cell-sub">N/A</span>`;
 
-            const contactName = esc(lead["Contact Name"] || "");
-            const contactTitle = esc(lead["Contact Title"] || "");
-            const contactEmail = esc(lead["Contact Email"] || "");
+            const contactName = esc(lead["Contact Name"] || "N/A");
+            const contactTitle = esc(lead["Contact Title"] || "N/A");
+            const rawEmail = lead["Contact Email"] || "";
 
-            const hasEmail = lead["Email Subject"]
+            // Verified email signal badge (Restrained emerald signal color)
+            const isVerifiedEmail = rawEmail && rawEmail !== "N/A" && rawEmail.includes("@");
+            const emailHtml = isVerifiedEmail
+                ? `<span class="badge-email-verified" title="${esc(rawEmail)}">${esc(rawEmail)}</span>`
+                : `<span class="badge-email-na">N/A</span>`;
+
+            const hasDraft = lead["Email Subject"]
                 && !lead["Email Subject"].includes("skipped")
                 && lead["Email Subject"] !== "N/A";
 
             tr.innerHTML = `
-                <td>
+                <td title="${compName} (${domain || 'N/A'})">
                     <div class="cell-primary">${compName}</div>
-                    ${domainHtml ? `<div class="cell-sub">${domainHtml}</div>` : ""}
+                    <div class="cell-sub">${domainHtml}</div>
                 </td>
-                <td><span class="badge-subtle">${esc(lead["Industry"] || "N/A")}</span></td>
-                <td>
+                <td title="${esc(lead["Industry"] || "N/A")}">
+                    <span class="industry-tag">${esc(lead["Industry"] || "N/A")}</span>
+                </td>
+                <td title="${contactName} - ${contactTitle}">
                     <div class="cell-primary">${contactName}</div>
-                    ${contactTitle && contactTitle !== "N/A" ? `<div class="cell-sub">${contactTitle}</div>` : ""}
+                    <div class="cell-sub">${contactTitle}</div>
                 </td>
-                <td><code class="email-code">${contactEmail || "&mdash;"}</code></td>
-                <td></td>
+                <td>${emailHtml}</td>
+                <td style="text-align: right;"></td>
             `;
 
             const actionTd = tr.querySelector("td:last-child");
-            if (hasEmail) {
+            if (hasDraft) {
+                // REFINEMENT 1: Lightweight secondary text link style for Inspect Draft
                 const btn = document.createElement("button");
-                btn.className = "view-btn";
-                btn.textContent = "View";
+                btn.className = "btn-view-draft";
+                btn.textContent = "Inspect ↗";
+                btn.type = "button";
+                btn.title = "Inspect generated cold outreach copy";
                 btn.onclick = () => openModal(
                     lead["Contact Email"],
                     lead["Email Subject"],
@@ -245,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 );
                 actionTd.appendChild(btn);
             } else {
-                actionTd.innerHTML = `<span class="text-muted">Skipped</span>`;
+                actionTd.innerHTML = `<span class="text-skipped">SKIPPED</span>`;
             }
 
             tbody.appendChild(tr);
@@ -253,7 +289,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // -------------------------------------------------------
-    // MODAL
+    // DRAFT INSPECTOR MODAL
     // -------------------------------------------------------
     function openModal(to, subject, body) {
         modalTo.textContent      = to || "N/A";
@@ -266,21 +302,23 @@ document.addEventListener("DOMContentLoaded", () => {
         modal.classList.remove("show");
     }
 
-    [modalClose, modalCancel, modalBack].forEach(el => {
-        el.addEventListener("click", closeModal);
+    [modalClose, modalCancel, modal].forEach(el => {
+        el.addEventListener("click", (e) => {
+            if (e.target === el) closeModal();
+        });
     });
 
     copyBtn.addEventListener("click", () => {
         navigator.clipboard.writeText(modalBody.textContent).then(() => {
-            const orig = copyBtn.querySelector(".btn-label")?.textContent || copyBtn.textContent;
-            copyBtn.textContent = "Copied";
-            setTimeout(() => { copyBtn.textContent = orig; }, 1400);
+            copyBtnText.textContent = "COPIED TO CLIPBOARD";
+            setTimeout(() => { copyBtnText.textContent = "COPY DRAFT TEXT"; }, 1400);
         });
     });
 
+    // CSV Export
     downloadBtn.addEventListener("click", () => {
         if (!currentLeads.length) return;
-        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "Contact Name", "Contact Title", "Contact Email"];
+        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "Contact Name", "Contact Title", "Contact Email", "Email Subject", "Email Body"];
         let csv = headers.join(",") + "\n";
         currentLeads.forEach(lead => {
             const vals = headers.map(h => {
@@ -289,7 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             csv += vals.join(",") + "\n";
         });
-        const blob = new Blob([csv], { type: "text/csv" });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -299,96 +337,119 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // -------------------------------------------------------
-    // PIPELINE STEP HELPERS
+    // REFINEMENT 3: STEP TRACKER IN-PROGRESS & COMPLETED STATES
     // -------------------------------------------------------
     function resetSteps() {
         allSteps.forEach(s => { s.classList.remove("active", "done"); });
+        stepSearchMeta.textContent = "Pending";
+        stepContactsMeta.textContent = "Pending";
+        stepDraftMeta.textContent = "Pending";
     }
 
-    function doneAllSteps() {
+    function doneAllSteps(data) {
         allSteps.forEach(s => { s.classList.remove("active"); s.classList.add("done"); });
+        
+        const compCount = data && data.companies ? data.companies.length : 0;
+        const contCount = data && data.contacts ? data.contacts.length : 0;
+        const emailCount = data && data.emails ? data.emails.length : 0;
+
+        stepSearchMeta.innerHTML = `<span class="step-check">✓</span> ${compCount} found`;
+        stepContactsMeta.innerHTML = `<span class="step-check">✓</span> ${contCount} found`;
+        stepDraftMeta.innerHTML = `<span class="step-check">✓</span> ${emailCount} drafted`;
+
+        if (summaryBanner) {
+            summaryBanner.classList.add("show");
+            if (summaryText) {
+                summaryText.textContent = `${compCount} companies discovered • ${contCount} contacts identified • ${emailCount} outreach drafts generated`;
+            }
+        }
     }
 
-    function updateSteps(logs) {
+    function updateSteps(logs, data) {
         const joined = logs.join(" ");
         const search   = joined.includes("search_companies");
         const contacts = joined.includes("get_contacts");
         const draft    = joined.includes("draft_emails");
 
+        const compCount = data && data.companies ? data.companies.length : 0;
+        const contCount = data && data.contacts ? data.contacts.length : 0;
+
         if (draft) {
-            stepSearch.classList.replace("active", "done")   || stepSearch.classList.add("done");
-            stepContacts.classList.replace("active", "done") || stepContacts.classList.add("done");
-            activate(stepDraft);
+            setStepDone(stepSearch, stepSearchMeta, `✓ ${compCount || ''} found`);
+            setStepDone(stepContacts, stepContactsMeta, `✓ ${contCount || ''} found`);
+            setStepActive(stepDraft, stepDraftMeta, "Drafting...");
         } else if (contacts) {
-            stepSearch.classList.replace("active", "done")   || stepSearch.classList.add("done");
-            activate(stepContacts);
+            setStepDone(stepSearch, stepSearchMeta, `✓ ${compCount || ''} found`);
+            setStepActive(stepContacts, stepContactsMeta, "Searching...");
         } else if (search) {
-            activate(stepSearch);
+            setStepActive(stepSearch, stepSearchMeta, "Running...");
         }
     }
 
-    function activate(step) {
-        if (!step.classList.contains("done")) step.classList.add("active");
+    function setStepActive(step, metaEl, text) {
+        if (!step.classList.contains("done")) {
+            step.classList.add("active");
+            if (metaEl) metaEl.textContent = text;
+        }
+    }
+
+    function setStepDone(step, metaEl, text) {
+        step.classList.remove("active");
+        step.classList.add("done");
+        if (metaEl) metaEl.innerHTML = `<span class="step-check">✓</span> ${text.replace('✓', '').trim()}`;
     }
 
     // -------------------------------------------------------
     // PROGRESS BAR HELPERS
     // -------------------------------------------------------
     function resetProgress() {
-        progressWrap.style.display = "flex";
+        progressWrap.classList.remove("completed");
         progressFill.style.width = "0%";
-        progressLabel.textContent = "Initializing...";
+        progressLabel.textContent = "Initializing pipeline...";
     }
 
     function updateProgress(progress) {
         if (!progress) return;
         const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
         progressFill.style.width = pct + "%";
-        progressLabel.textContent = progress.detail || `${progress.current}/${progress.total}`;
+        progressLabel.textContent = progress.detail || `Progress: ${progress.current}/${progress.total}`;
     }
 
-    function completeProgress() {
+    function completeProgress(data) {
+        progressWrap.classList.add("completed");
         progressFill.style.width = "100%";
-        progressLabel.textContent = "Pipeline complete ✓";
+        progressLabel.textContent = "Pipeline execution complete ✓";
     }
 
     // -------------------------------------------------------
-    // CONSOLE HELPERS
+    // CONSOLE & LOG HELPERS
     // -------------------------------------------------------
     function clearConsole() {
         consoleLogs.innerHTML = "";
     }
 
     function log(text, cls = "") {
-        const p = document.createElement("p");
-        p.className = "console-line" + (cls ? ` ${cls}` : "");
-        p.textContent = text;
-        consoleLogs.appendChild(p);
+        const div = document.createElement("div");
+        div.className = "terminal-line" + (cls ? ` ${cls}` : "");
+        div.textContent = text;
+        consoleLogs.appendChild(div);
         consoleLogs.scrollTop = consoleLogs.scrollHeight;
     }
 
     // -------------------------------------------------------
-    // BADGE & BUTTON HELPERS
+    // STATUS BADGE & BUTTON HELPERS
     // -------------------------------------------------------
     function setBadge(state) {
-        badge.className = `status-badge ${state}`;
-        badgeText.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+        badge.className = `status-indicator ${state}`;
+        badgeText.textContent = state.toUpperCase();
     }
 
     function setLoading(on) {
         submitBtn.disabled = on;
-        submitBtn.classList.toggle("loading", on);
-        btnLabel.textContent = on ? "Running..." : "Execute Pipeline";
-    }
-
-    // -------------------------------------------------------
-    // UTILITIES
-    // -------------------------------------------------------
-    function truncate(s, n) {
-        return s && s.length > n ? s.slice(0, n) + "..." : s;
+        btnText.textContent = on ? "PIPELINE RUNNING..." : "EXECUTE PIPELINE";
     }
 
     function esc(s) {
-        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
 });
