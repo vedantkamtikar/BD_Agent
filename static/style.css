@@ -668,11 +668,12 @@ html, body {
 }
 
 /* COLUMN DEFINITIONS & ALIGNMENT */
-.col-company  { width: 25%; }
-.col-industry { width: 15%; }
-.col-contact  { width: 23%; }
-.col-email    { width: 25%; }
-.col-action   { width: 12%; text-align: right; }
+.col-company  { width: 22%; }
+.col-industry { width: 13%; }
+.col-contact  { width: 22%; }
+.col-linkedin { width: 14%; }
+.col-email    { width: 19%; }
+.col-action   { width: 10%; text-align: right; }
 
 .leads-data-table th.col-action {
     text-align: right;

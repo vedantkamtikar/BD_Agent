@@ -52,6 +52,29 @@ def is_valid_person_name(name: str) -> bool:
     return True
 
 
+LINKEDIN_URL_REGEX = re.compile(r'https?://(?:[a-z]{2,3}\.)?linkedin\.com/in/[a-zA-Z0-9%\-_]+/?', re.IGNORECASE)
+
+
+def extract_linkedin_urls_from_text(text: str) -> List[str]:
+    """Extracts clean LinkedIn user profile URLs from search text snippets."""
+    if not text:
+        return []
+    matches = LINKEDIN_URL_REGEX.findall(text)
+    return list(dict.fromkeys([m.rstrip('/') for m in matches]))
+
+
+def get_role_priority_score(title: str) -> int:
+    """Assigns priority score: CEO (1) > MD (2) > CHRO (3) > Other (4)."""
+    t = (title or "").lower()
+    if any(k in t for k in ["ceo", "chief executive officer", "founder"]):
+        return 1
+    elif any(k in t for k in ["managing director", "md"]):
+        return 2
+    elif any(k in t for k in ["chro", "chief human resources officer", "hr head", "vp hr", "head of human resources"]):
+        return 3
+    return 4
+
+
 
 
 def normalize_domain(url: str) -> str:
@@ -282,6 +305,7 @@ class GeminiService:
 
         return contact
 
+
     def _try_pattern_synthesis(
         self,
         contact_name: str,
@@ -347,13 +371,11 @@ class GeminiService:
 
         return None
 
-
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
     def get_contacts_for_company(self, company: Company, max_contacts: int = 3, logs_out: Optional[List[str]] = None) -> List[Contact]:
         """
-        Step 1 (Search): Searches for executive contacts across priority tiers (Tier 1: C-Suite/Founders -> Tier 2: VPs/BD -> Tier 3: Directors).
-        Step 2 (Parse): Converts the unstructured contact list into Contact Pydantic models with person validation.
-        Step 3 (Agent Loop): Runs targeted search dork playbook and pattern verification concurrently for each contact.
+        Targeted Executive Discovery: Searches for CEO, MD, and CHRO contacts in priority order (CEO > MD > CHRO)
+        including their LinkedIn profile URLs, using 1 Serper search + 1 Gemini parse per company.
         """
         if logs_out is None:
             logs_out = []
@@ -363,55 +385,73 @@ class GeminiService:
             if "nocontact" in company.name.lower():
                 print(f"[GeminiService] [MOCK MODE] Simulating no contacts found for '{company.name}'...")
                 return []
-            contacts = []
-            if max_contacts >= 1:
-                contacts.append(Contact(
+            domain_str = company.domain or "example.com"
+            slug = company.name.replace(" ", "").lower()
+            contacts = [
+                Contact(
                     name="Sarah Jenkins",
-                    title="Founder & CEO",
-                    email=f"sarah.jenkins@{company.domain or 'example.com'}",
+                    title="Chief Executive Officer (CEO)",
+                    email=f"sarah.jenkins@{domain_str}",
+                    linkedin_url=f"https://www.linkedin.com/in/sarahjenkins-{slug}-ceo",
                     company_name=company.name,
                     company_domain=company.domain
-                ))
-            if max_contacts >= 2:
-                contacts.append(Contact(
-                    name="David Chen",
-                    title="VP Engineering",
-                    email=f"david.chen@{company.domain or 'example.com'}",
+                ),
+                Contact(
+                    name="Rajesh Sharma",
+                    title="Managing Director (MD)",
+                    email=f"rsharma@{domain_str}",
+                    linkedin_url=f"https://www.linkedin.com/in/rajesh-sharma-{slug}-md",
                     company_name=company.name,
                     company_domain=company.domain
-                ))
-            print(f"[GeminiService] [MOCK MODE] Generated {len(contacts)} simulated contacts for '{company.name}'.")
-            return contacts
+                ),
+                Contact(
+                    name="Anita Desai",
+                    title="Chief Human Resources Officer (CHRO)",
+                    email=f"anita.desai@{domain_str}",
+                    linkedin_url=f"https://www.linkedin.com/in/anita-desai-{slug}-chro",
+                    company_name=company.name,
+                    company_domain=company.domain
+                )
+            ]
+            print(f"[GeminiService] [MOCK MODE] Generated {len(contacts)} simulated CEO/MD/CHRO contacts for '{company.name}'.")
+            return contacts[:max_contacts]
 
-        # Phase 1: Search for candidates across leadership tiers
-        log_msg = f"[Agent] Searching web for leadership contacts at '{company.name}'..."
+        # Single combined query targeting CEO, MD, CHRO and LinkedIn profile pages
+        log_msg = f"[Agent] Searching CEO, MD & CHRO contacts + LinkedIn profiles for '{company.name}'..."
         print(log_msg)
         logs_out.append(log_msg)
 
         search_query = (
-            f'"{company.name}" (CEO OR "Chief Executive Officer" OR Founder OR "Managing Director" '
-            f'OR President OR COO OR "VP Sales" OR "VP Business Development" OR CTO OR Director) '
-            f'leadership team {company.domain or ""}'
+            f'"{company.name}" (CEO OR "Chief Executive Officer" OR "Managing Director" OR "MD" OR "CHRO" OR "Chief Human Resources Officer" OR "HR Head") '
+            f'site:linkedin.com/in/ OR "linkedin.com/in"'
         )
         raw_markdown = self.serper.search(search_query, num_results=10)
 
-        log_msg = f"[Agent] Extracting initial structured contact list for '{company.name}'..."
+        log_msg = f"[Agent] Parsing structured CEO/MD/CHRO profiles for '{company.name}'..."
         print(log_msg)
         logs_out.append(log_msg)
+
+        # Extract LinkedIn links directly from snippets via regex as secondary fallback
+        snippet_linkedins = extract_linkedin_urls_from_text(raw_markdown)
 
         structured_llm = self.llm_parse.with_structured_output(ContactList)
 
         parse_prompt = ChatPromptTemplate.from_template(
             "Parse the following web search results about leadership contacts at '{company_name}' "
-            "into a clean list of up to {max_contacts} structured contact objects prioritizing top executives "
-            "(CEO, Founder, COO, VP, Director).\n\n"
+            "into a clean list of structured contact objects targeting executives in priority order: "
+            "1. CEO (Chief Executive Officer / Founder)\n"
+            "2. MD (Managing Director)\n"
+            "3. CHRO (Chief Human Resources Officer / HR Head)\n\n"
             "Company: {company_name}\n"
             "Company Domain: {company_domain}\n\n"
             "Web Search Results:\n{markdown}\n\n"
-            "Extract name, title, and email. Ensure you populate 'company_name' as '{company_name}' "
-            "and 'company_domain' as '{company_domain}' for each contact. "
-            "CRITICAL: Only include real individual persons (do not include departments, 'Board of Directors', or placeholder entities). "
-            "Only populate 'email' if explicitly present in the search snippets. If not explicitly found, leave it blank."
+            "For each contact, extract:\n"
+            "- name: Full personal name\n"
+            "- title: Official role (e.g. 'CEO', 'Managing Director', 'CHRO')\n"
+            "- linkedin_url: Official LinkedIn user profile URL (e.g. 'https://www.linkedin.com/in/username'). If present in snippet, extract full URL; else null.\n"
+            "- email: Business email address if explicitly present in snippet; else leave blank.\n\n"
+            "Ensure you populate 'company_name' as '{company_name}' and 'company_domain' as '{company_domain}'. "
+            "CRITICAL: Only include real individual persons. Do not include departments or corporate board placeholders."
         )
 
         parser_chain = parse_prompt | structured_llm
@@ -422,7 +462,7 @@ class GeminiService:
             "max_contacts": str(max_contacts)
         })
 
-        # Filter out non-person entities and invalid parses
+        # Filter out non-person entities
         valid_contacts = [
             c for c in parsed_result.contacts
             if c.name and is_valid_person_name(c.name)
@@ -432,6 +472,18 @@ class GeminiService:
                 c for c in parsed_result.contacts
                 if c.name and c.name.lower() not in ("n/a", "none", "unknown", "null")
             ]
+
+        # Fallback snippet matching for linkedin_url if missing from LLM parse
+        for c in valid_contacts:
+            if not c.linkedin_url and snippet_linkedins:
+                c_first = c.name.split()[0].lower()
+                for url in snippet_linkedins:
+                    if c_first in url.lower():
+                        c.linkedin_url = url
+                        break
+
+        # Sort contacts by target role priority (CEO=1 > MD=2 > CHRO=3 > Other=4)
+        valid_contacts.sort(key=lambda c: get_role_priority_score(c.title))
 
         # Deduplicate contacts by name
         seen_names = set()
@@ -443,8 +495,7 @@ class GeminiService:
                 unique_contacts.append(c)
         valid_contacts = unique_contacts[:max_contacts]
 
-        # Enforce company name/domain consistency — prevents orphaned contacts
-        # from LLM returning slightly different company names
+        # Enforce company name/domain consistency
         for c in valid_contacts:
             c.company_name = company.name
             c.company_domain = company.domain
@@ -453,7 +504,7 @@ class GeminiService:
             return []
 
         # Phase 2: Sequential email hunting for each contact
-        log_msg = f"[Agent] Hunting emails for {len(valid_contacts)} contacts at '{company.name}'..."
+        log_msg = f"[Agent] Hunting emails for {len(valid_contacts)} executive contacts at '{company.name}'..."
         print(log_msg)
         logs_out.append(log_msg)
 

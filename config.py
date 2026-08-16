@@ -16,6 +16,10 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
+# Gmail API OAuth2 configuration
+GMAIL_CLIENT_SECRETS_FILE = os.getenv("GMAIL_CLIENT_SECRETS_FILE", "client_secrets.json")
+GMAIL_TOKEN_FILE = os.getenv("GMAIL_TOKEN_FILE", "token.json")
+
 # LangSmith / LangChain tracing configuration
 LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
@@ -58,6 +62,12 @@ def check_config() -> bool:
         print("       -> The agent will write leads locally to 'leads_log.csv' instead.")
     else:
         print(f"[OK] Google Sheets integration active (Sheet ID: {GOOGLE_SHEET_ID})")
+
+    # Check Gmail Drafts Integration
+    if os.path.exists(GMAIL_TOKEN_FILE) or os.path.exists(GMAIL_CLIENT_SECRETS_FILE):
+        print(f"[OK] Gmail API credentials available ({GMAIL_CLIENT_SECRETS_FILE} / {GMAIL_TOKEN_FILE}).")
+    else:
+        print("[INFO] Gmail API credentials (client_secrets.json) not found.")
 
     # Check LangSmith Tracing
     if LANGCHAIN_TRACING_V2:

@@ -92,6 +92,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const senderName = document.getElementById("sender-name").value.trim();
         const senderTitle = document.getElementById("sender-title").value.trim();
         const tone       = document.getElementById("outreach-tone").value;
+        const draftEmailsEnabled = (document.getElementById("draft-emails-toggle")?.value || "true") === "true";
+        const syncGmailDrafts    = (document.getElementById("sync-gmail-toggle")?.value || "true") === "true";
 
         if (!niche) return;
 
@@ -115,7 +117,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     max_revenue: maxRevenue,
                     sender_name: senderName,
                     sender_title: senderTitle,
-                    tone
+                    tone,
+                    draft_emails_enabled: draftEmailsEnabled,
+                    sync_gmail_drafts: syncGmailDrafts
                 })
             });
             if (!res.ok) throw new Error("Failed to initialize pipeline.");
@@ -193,7 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // -------------------------------------------------------
-    // LEADS DATA TABLE RENDERER (STRICT ROW HEIGHT & DRAFT LINK)
+    // LEADS DATA TABLE RENDERER (STRICT ROW HEIGHT & LINKEDIN COLUMN)
     // -------------------------------------------------------
     async function loadLeads() {
         try {
@@ -211,7 +215,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!currentLeads.length) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="table-empty-cell">
+                    <td colspan="6" class="table-empty-cell">
                         <div class="empty-state-box">
                             <span class="empty-code">NO DATA AVAILABLE</span>
                             <p class="empty-msg">Configure execution parameters in Panel 01 and trigger the pipeline to discover decision-makers.</p>
@@ -240,7 +244,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const contactTitle = esc(lead["Contact Title"] || "N/A");
             const rawEmail = lead["Contact Email"] || "";
 
-            // Verified email signal badge (Restrained emerald signal color)
+            // LinkedIn URL rendering
+            const rawLinkedin = lead["LinkedIn URL"] || "";
+            const hasLinkedin = rawLinkedin && rawLinkedin !== "N/A" && rawLinkedin.includes("linkedin.com");
+            const linkedinHtml = hasLinkedin
+                ? `<a href="${esc(rawLinkedin)}" target="_blank" rel="noopener" class="domain-link" title="${esc(rawLinkedin)}">LinkedIn ↗</a>`
+                : `<span class="badge-email-na">N/A</span>`;
+
+            // Verified email signal badge
             const isVerifiedEmail = rawEmail && rawEmail !== "N/A" && rawEmail.includes("@");
             const emailHtml = isVerifiedEmail
                 ? `<span class="badge-email-verified" title="${esc(rawEmail)}">${esc(rawEmail)}</span>`
@@ -262,13 +273,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="cell-primary">${contactName}</div>
                     <div class="cell-sub">${contactTitle}</div>
                 </td>
+                <td>${linkedinHtml}</td>
                 <td>${emailHtml}</td>
                 <td style="text-align: right;"></td>
             `;
 
             const actionTd = tr.querySelector("td:last-child");
             if (hasDraft) {
-                // REFINEMENT 1: Lightweight secondary text link style for Inspect Draft
                 const btn = document.createElement("button");
                 btn.className = "btn-view-draft";
                 btn.textContent = "Inspect ↗";
@@ -318,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // CSV Export
     downloadBtn.addEventListener("click", () => {
         if (!currentLeads.length) return;
-        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "Contact Name", "Contact Title", "Contact Email", "Email Subject", "Email Body"];
+        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "Contact Name", "Contact Title", "LinkedIn URL", "Contact Email"];
         let csv = headers.join(",") + "\n";
         currentLeads.forEach(lead => {
             const vals = headers.map(h => {
@@ -336,6 +347,10 @@ document.addEventListener("DOMContentLoaded", () => {
         URL.revokeObjectURL(url);
     });
 
+    // Step tracker elements
+    const stepGmail = document.getElementById("step-gmail");
+    const stepGmailMeta = document.getElementById("step-gmail-meta");
+
     // -------------------------------------------------------
     // REFINEMENT 3: STEP TRACKER IN-PROGRESS & COMPLETED STATES
     // -------------------------------------------------------
@@ -344,6 +359,7 @@ document.addEventListener("DOMContentLoaded", () => {
         stepSearchMeta.textContent = "Pending";
         stepContactsMeta.textContent = "Pending";
         stepDraftMeta.textContent = "Pending";
+        if (stepGmailMeta) stepGmailMeta.textContent = "Pending";
     }
 
     function doneAllSteps(data) {
@@ -356,11 +372,12 @@ document.addEventListener("DOMContentLoaded", () => {
         stepSearchMeta.innerHTML = `<span class="step-check">✓</span> ${compCount} found`;
         stepContactsMeta.innerHTML = `<span class="step-check">✓</span> ${contCount} found`;
         stepDraftMeta.innerHTML = `<span class="step-check">✓</span> ${emailCount} drafted`;
+        if (stepGmailMeta) stepGmailMeta.innerHTML = `<span class="step-check">✓</span> Synced`;
 
         if (summaryBanner) {
             summaryBanner.classList.add("show");
             if (summaryText) {
-                summaryText.textContent = `${compCount} companies discovered • ${contCount} contacts identified • ${emailCount} outreach drafts generated`;
+                summaryText.textContent = `${compCount} companies discovered • ${contCount} contacts identified • ${emailCount} outreach drafts synced to Gmail`;
             }
         }
     }
@@ -370,11 +387,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const search   = joined.includes("search_companies");
         const contacts = joined.includes("get_contacts");
         const draft    = joined.includes("draft_emails");
+        const gmail    = joined.includes("create_gmail_drafts");
 
         const compCount = data && data.companies ? data.companies.length : 0;
         const contCount = data && data.contacts ? data.contacts.length : 0;
+        const emailCount = data && data.emails ? data.emails.length : 0;
 
-        if (draft) {
+        if (gmail) {
+            setStepDone(stepSearch, stepSearchMeta, `✓ ${compCount || ''} found`);
+            setStepDone(stepContacts, stepContactsMeta, `✓ ${contCount || ''} found`);
+            setStepDone(stepDraft, stepDraftMeta, `✓ ${emailCount || ''} drafted`);
+            setStepActive(stepGmail, stepGmailMeta, "Syncing Gmail...");
+        } else if (draft) {
             setStepDone(stepSearch, stepSearchMeta, `✓ ${compCount || ''} found`);
             setStepDone(stepContacts, stepContactsMeta, `✓ ${contCount || ''} found`);
             setStepActive(stepDraft, stepDraftMeta, "Drafting...");

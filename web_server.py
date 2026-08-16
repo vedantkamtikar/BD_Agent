@@ -34,9 +34,11 @@ class RunRequest(BaseModel):
     sender_name: str = "Alex"
     sender_title: str = "Lead Consultant"
     tone: str = "formal"
+    draft_emails_enabled: bool = True
+    sync_gmail_drafts: bool = True
 
 
-def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, min_revenue: str, max_revenue: str, sender_name: str, sender_title: str, tone: str):
+def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, min_revenue: str, max_revenue: str, sender_name: str, sender_title: str, tone: str, draft_emails_enabled: bool = True, sync_gmail_drafts: bool = True):
     """Executes the LangGraph agent on a background thread."""
     initial_state = {
         "target_niche": niche,
@@ -47,6 +49,8 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
         "sender_name": sender_name,
         "sender_title": sender_title,
         "tone": tone,
+        "draft_emails_enabled": draft_emails_enabled,
+        "sync_gmail_drafts": sync_gmail_drafts,
         "companies": [],
         "contacts": [],
         "emails": [],
@@ -171,13 +175,11 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
                     "HQ": comp.headquarters or "N/A",
                     "Contact Name": "N/A (No contacts found)",
                     "Contact Title": "N/A",
-                    "Contact Email": "N/A",
-                    "Email Subject": "N/A (Email drafting skipped)",
-                    "Email Body": "N/A"
+                    "LinkedIn URL": "N/A",
+                    "Contact Email": "N/A"
                 })
             else:
                 for contact in comp_contacts:
-                    draft = emails_by_contact.get(contact.email)
                     lead_rows.append({
                         "Company Name": comp.name,
                         "Company Domain": comp.domain or "N/A",
@@ -186,9 +188,8 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
                         "HQ": comp.headquarters or "N/A",
                         "Contact Name": contact.name,
                         "Contact Title": contact.title or "N/A",
-                        "Contact Email": contact.email or "N/A",
-                        "Email Subject": draft.subject if draft else "N/A (No draft generated)",
-                        "Email Body": draft.body if draft else "N/A"
+                        "LinkedIn URL": getattr(contact, "linkedin_url", None) or "N/A",
+                        "Contact Email": contact.email or "N/A"
                     })
 
         with runs_lock:
@@ -231,7 +232,9 @@ def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
         max_revenue=request.max_revenue,
         sender_name=request.sender_name,
         sender_title=request.sender_title,
-        tone=request.tone
+        tone=request.tone,
+        draft_emails_enabled=request.draft_emails_enabled,
+        sync_gmail_drafts=request.sync_gmail_drafts
     )
     return {"thread_id": thread_id, "status": "started"}
 

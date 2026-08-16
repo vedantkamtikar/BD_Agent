@@ -19,8 +19,9 @@ class Contact(BaseModel):
     Pydantic schema representing an individual contact (prospect) working at a lead organization.
     """
     name: str = Field(description="The full name of the contact person.")
-    title: Optional[str] = Field(None, description="The job title or professional role of the contact (e.g., 'Founder & CEO').")
+    title: Optional[str] = Field(None, description="The job title or professional role of the contact (e.g., 'Founder & CEO', 'MD', 'CHRO').")
     email: Optional[str] = Field(None, description="The business email address of the contact, if publicly searchable or inferred.")
+    linkedin_url: Optional[str] = Field(None, description="The official LinkedIn profile URL of the contact person (e.g., 'https://www.linkedin.com/in/username').")
     company_name: str = Field(description="The name of the company where this contact works.")
     company_domain: Optional[str] = Field(None, description="The domain of the company where this contact works.")
 

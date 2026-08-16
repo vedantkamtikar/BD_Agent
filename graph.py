@@ -5,8 +5,9 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from models import Company, Contact, EmailDraft
 from services.gemini import GeminiService
+from services.gmail import GmailService
 
-# Initialize the Gemini service instance
+# Initialize service instances
 gemini_service = GeminiService()
 
 
@@ -24,6 +25,8 @@ class LeadState(TypedDict):
     sender_name: str
     sender_title: str
     tone: str
+    draft_emails_enabled: bool
+    sync_gmail_drafts: bool
     companies: Annotated[List[Company], operator.add]
     contacts: Annotated[List[Contact], operator.add]
     emails: Annotated[List[EmailDraft], operator.add]
@@ -117,18 +120,22 @@ def should_draft(state: LeadState) -> str:
     """
     Conditional Routing Edge Function.
     Decides whether to route to the 'draft_emails' node or bypass directly to 'END'
-    depending on whether at least one contact has a verified email.
+    depending on whether draft_emails_enabled is True AND at least one contact has a verified email.
     """
     print("\n" + "~" * 60)
     print("   [CONDITIONAL EDGE] EVALUATING: should_draft")
     print("~" * 60)
     
+    draft_enabled = state.get("draft_emails_enabled", True)
     contacts = state.get("contacts", [])
     verified_contacts = [c for c in contacts if c.email and c.email != "N/A" and "@" in c.email]
     
-    print(f"[should_draft] Total contacts in state: {len(contacts)} (Verified emails: {len(verified_contacts)})")
+    print(f"[should_draft] Draft emails enabled: {draft_enabled} | Total contacts: {len(contacts)} (Verified emails: {len(verified_contacts)})")
     
-    if len(verified_contacts) > 0:
+    if not draft_enabled:
+        decision = END
+        print(" -> Decision: Draft outreach emails option is DISABLED. Routing to: 'END' (bypassing email drafting)")
+    elif len(verified_contacts) > 0:
         decision = "draft_emails"
         print(f" -> Decision: {len(verified_contacts)} verified contacts found. Routing to: 'draft_emails'")
     else:
@@ -185,6 +192,43 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     }
 
 
+def create_gmail_drafts_node(state: LeadState) -> Dict[str, Any]:
+    """
+    Node: create_gmail_drafts
+    Syncs generated email drafts directly into the user's Gmail Drafts folder using Gmail API.
+    """
+    print("\n" + "=" * 60)
+    print("   [NODE] ENTERING: create_gmail_drafts")
+    print("=" * 60)
+    
+    sync_enabled = state.get("sync_gmail_drafts", True)
+    emails = state.get("emails", [])
+    
+    if not sync_enabled:
+        log_msg = "create_gmail_drafts: Skipped. Sync to Gmail Drafts option is DISABLED."
+        print(f"\n[NODE] EXITING: create_gmail_drafts -> {log_msg}")
+        print("=" * 60 + "\n")
+        return {"logs": [log_msg]}
+        
+    if not emails:
+        log_msg = "create_gmail_drafts: Skipped. No email drafts present in state."
+        print(f"\n[NODE] EXITING: create_gmail_drafts -> {log_msg}")
+        print("=" * 60 + "\n")
+        return {"logs": [log_msg]}
+        
+    gmail_service = GmailService()
+    node_logs = []
+    synced_count = gmail_service.batch_create_drafts(emails, logs_out=node_logs)
+    
+    log_msg = f"create_gmail_drafts: Synced {synced_count} drafts to Gmail Drafts folder."
+    print(f"\n[NODE] EXITING: create_gmail_drafts -> {log_msg}")
+    print("=" * 60 + "\n")
+    
+    return {
+        "logs": node_logs + [log_msg]
+    }
+
+
 # -----------------------------------------------------------------------------
 # Graph Assembly
 # Instantiate the state graph using the LeadState TypedDict
@@ -194,6 +238,7 @@ builder = StateGraph(LeadState)
 builder.add_node("search_companies", search_companies_node)
 builder.add_node("get_contacts", get_contacts_node)
 builder.add_node("draft_emails", draft_emails_node)
+builder.add_node("create_gmail_drafts", create_gmail_drafts_node)
 
 # Set the start node
 builder.set_entry_point("search_companies")
@@ -211,8 +256,9 @@ builder.add_conditional_edges(
     }
 )
 
-# Connect the drafting node to the final end state
-builder.add_edge("draft_emails", END)
+# Connect the drafting node to the Gmail draft sync node, then END
+builder.add_edge("draft_emails", "create_gmail_drafts")
+builder.add_edge("create_gmail_drafts", END)
 
 # Initialize a thread memory checkpointer
 checkpointer = MemorySaver()

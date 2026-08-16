@@ -15,9 +15,8 @@ HEADERS = [
     "HQ",
     "Contact Name", 
     "Contact Title", 
-    "Contact Email", 
-    "Email Subject", 
-    "Email Body"
+    "LinkedIn URL",
+    "Contact Email"
 ]
 
 
@@ -182,14 +181,12 @@ class LeadLogger:
                     "N/A (No contacts found)",
                     "N/A",
                     "N/A",
-                    "N/A (Email drafting skipped)",
                     "N/A"
                 ]
                 rows.append(row)
             else:
-                # Scenario: Contacts found. Write a row for each contact and draft
+                # Scenario: Contacts found. Write a row for each contact
                 for contact in comp_contacts:
-                    draft = emails_by_contact.get(contact.email)
                     row = [
                         timestamp,
                         company.name,
@@ -199,9 +196,8 @@ class LeadLogger:
                         company.headquarters or "N/A",
                         contact.name,
                         contact.title or "N/A",
-                        contact.email or "N/A",
-                        draft.subject if draft else "N/A (No draft generated)",
-                        draft.body if draft else "N/A"
+                        getattr(contact, "linkedin_url", None) or "N/A",
+                        contact.email or "N/A"
                     ]
                     rows.append(row)
 

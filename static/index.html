@@ -87,12 +87,29 @@
                             </div>
                         </div>
 
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="outreach-tone">OUTREACH TONE</label>
+                                <select class="form-input select-input" id="outreach-tone">
+                                    <option value="formal" selected>Formal / Executive</option>
+                                    <option value="conversational">Conversational / Warm</option>
+                                    <option value="bold">Bold / Direct</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="draft-emails-toggle">DRAFT OUTREACH EMAILS</label>
+                                <select class="form-input select-input" id="draft-emails-toggle">
+                                    <option value="true" selected>Enabled (Yes)</option>
+                                    <option value="false">Disabled (No - Discovery Only)</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="form-group">
-                            <label class="form-label" for="outreach-tone">OUTREACH TONE</label>
-                            <select class="form-input select-input" id="outreach-tone">
-                                <option value="formal" selected>Formal / Executive</option>
-                                <option value="conversational">Conversational / Warm</option>
-                                <option value="bold">Bold / Direct</option>
+                            <label class="form-label" for="sync-gmail-toggle">SYNC TO GMAIL DRAFTS</label>
+                            <select class="form-input select-input" id="sync-gmail-toggle">
+                                <option value="true" selected>Enabled (Push to Gmail Drafts)</option>
+                                <option value="false">Disabled (Local Drafts Only)</option>
                             </select>
                         </div>
 
@@ -130,6 +147,13 @@
                                 <span class="step-label">draft_emails</span>
                             </div>
                             <span class="step-meta" id="step-draft-meta">Pending</span>
+                        </div>
+                        <div class="tracker-step" id="step-gmail">
+                            <div class="step-main">
+                                <span class="step-code">04</span>
+                                <span class="step-label">create_gmail_drafts</span>
+                            </div>
+                            <span class="step-meta" id="step-gmail-meta">Pending</span>
                         </div>
                     </div>
 
@@ -192,13 +216,14 @@
                                 <th scope="col" class="col-company">COMPANY &amp; DOMAIN</th>
                                 <th scope="col" class="col-industry">INDUSTRY</th>
                                 <th scope="col" class="col-contact">STAKEHOLDER</th>
+                                <th scope="col" class="col-linkedin">LINKEDIN</th>
                                 <th scope="col" class="col-email">EMAIL ADDRESS</th>
                                 <th scope="col" class="col-action">OUTREACH DRAFT</th>
                             </tr>
                         </thead>
                         <tbody id="leads-tbody">
                             <tr>
-                                <td colspan="5" class="table-empty-cell">
+                                <td colspan="6" class="table-empty-cell">
                                     <div class="empty-state-box">
                                         <span class="empty-code">NO DATA AVAILABLE</span>
                                         <p class="empty-msg">Configure execution parameters in Panel 01 and trigger the pipeline to discover decision-makers.</p>
