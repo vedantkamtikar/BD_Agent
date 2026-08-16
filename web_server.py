@@ -209,7 +209,7 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
 
 # --- Routes ---
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
     path = os.path.join("static", "index.html")
     if os.path.exists(path):

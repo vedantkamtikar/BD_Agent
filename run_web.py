@@ -6,7 +6,7 @@ import uvicorn
 
 
 def open_browser(host: str, port: int):
-    if os.getenv("NO_BROWSER", "false").lower() == "true":
+    if os.getenv("NO_BROWSER", "false").lower() == "true" or os.getenv("RENDER"):
         return
     time.sleep(1.5)
     display_host = "localhost" if host == "0.0.0.0" else host
