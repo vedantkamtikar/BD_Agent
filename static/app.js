@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const progressWrap  = document.getElementById("progress-wrap");
     const progressFill  = document.getElementById("progress-fill");
     const progressLabel = document.getElementById("progress-label");
+    const progressPct   = document.getElementById("progress-pct");
     const summaryBanner = document.getElementById("summary-banner");
     const summaryText   = document.getElementById("summary-banner-text");
 
@@ -122,6 +123,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     sync_gmail_drafts: syncGmailDrafts
                 })
             });
+            if (res.status === 409) {
+                const errData = await res.json();
+                throw new Error(errData.detail || "A pipeline is already running.");
+            }
             if (!res.ok) throw new Error("Failed to initialize pipeline.");
             const data = await res.json();
             
@@ -430,18 +435,24 @@ document.addEventListener("DOMContentLoaded", () => {
         progressWrap.classList.remove("completed");
         progressFill.style.width = "0%";
         progressLabel.textContent = "Initializing pipeline...";
+        if (progressPct) progressPct.textContent = "0%";
     }
 
     function updateProgress(progress) {
         if (!progress) return;
-        const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+        const pct = (typeof progress.percent === "number")
+            ? progress.percent
+            : (progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0);
+            
         progressFill.style.width = pct + "%";
-        progressLabel.textContent = progress.detail || `Progress: ${progress.current}/${progress.total}`;
+        if (progressPct) progressPct.textContent = pct + "%";
+        if (progress.detail) progressLabel.textContent = progress.detail;
     }
 
     function completeProgress(data) {
         progressWrap.classList.add("completed");
         progressFill.style.width = "100%";
+        if (progressPct) progressPct.textContent = "100%";
         progressLabel.textContent = "Pipeline execution complete ✓";
     }
 

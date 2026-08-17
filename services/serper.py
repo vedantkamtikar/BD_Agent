@@ -1,6 +1,6 @@
 import re
 import requests
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 import urllib.parse
 
@@ -156,72 +156,6 @@ class SerperService:
         data = response.json()
 
         return self._format_results(data)
-
-    def search_with_urls(self, query: str, num_results: int = 10) -> Tuple[str, List[str]]:
-        """
-        Like search(), but also returns the list of organic result URLs
-        so the caller can attempt direct page scraping.
-
-        Returns:
-            (markdown_str, list_of_urls)
-        """
-        payload = {
-            "q": query,
-            "num": num_results
-        }
-
-        print(f"[SerperService] Searching: '{query}' (requesting {num_results} results)...")
-
-        response = requests.post(
-            SERPER_API_URL,
-            headers=self.headers,
-            json=payload,
-            timeout=15
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        markdown = self._format_results(data)
-        urls = [r.get("link", "") for r in data.get("organic", []) if r.get("link")]
-        return markdown, urls
-
-    def fetch_emails_from_page(self, url: str, target_domain: str, contact_name: str = "") -> List[str]:
-        """
-        Fetches a web page and extracts all email addresses matching @target_domain
-        using regex scan and de-obfuscation over the full HTML body.
-        Excludes generic inboxes and prioritizes emails matching contact_name.
-
-        Args:
-            url: The full URL to fetch.
-            target_domain: Only return emails ending with this domain (e.g., 'tata.com').
-            contact_name: Optional contact name to prioritize/match.
-
-        Returns:
-            A prioritized, deduplicated list of found email addresses.
-        """
-        try:
-            resp = requests.get(
-                url,
-                timeout=6,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"},
-                allow_redirects=True
-            )
-            if resp.status_code != 200:
-                return []
-
-            extracted = extract_emails_from_text(resp.text, target_domain=target_domain, filter_generic=True)
-            
-            if contact_name and extracted:
-                # Prioritize emails that match the contact's name
-                matching = [e for e in extracted if is_matching_contact_email(e, contact_name)]
-                if matching:
-                    return matching
-                    
-            return extracted
-
-        except Exception as exc:
-            print(f"[SerperService] Page fetch failed for {url}: {exc}")
-            return []
 
     def _format_results(self, data: Dict[str, Any]) -> str:
         """

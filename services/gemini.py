@@ -151,26 +151,35 @@ class GeminiService:
             for i in range(1, max_results + 1):
                 name = f"Mock {niche.title()} Corp {i}"
                 domain = f"mock{niche_slug}{i}.com"
-                rev_desc = f" (Revenue: {min_revenue or 'Unspecified'} to {max_revenue or 'Unspecified'})" if (min_revenue or max_revenue) else ""
                 companies.append(Company(
                     name=name,
                     domain=domain,
                     industry=niche,
-                    description=f"A top-tier firm specializing in {niche} based in {location}{rev_desc}.",
+                    employee_count="500+",
+                    headquarters=location,
                     source="Mock Local Generator"
                 ))
             print(f"[GeminiService] [MOCK MODE] Generated {len(companies)} simulated companies.")
             return companies
 
-        print(f"[GeminiService] Step A: Searching web for {max_results} companies in '{niche}' located in '{location}'{revenue_log_str}...")
+        print(f"[GeminiService] Step A: Searching web for {max_results} '{niche}' companies headquartered in '{location}'{revenue_log_str}...")
         
         query_rev = []
         if min_revenue: query_rev.append(f"minimum annual revenue {min_revenue}")
         if max_revenue: query_rev.append(f"maximum annual revenue {max_revenue}")
         revenue_term = f" {' '.join(query_rev)}" if query_rev else ""
 
-        search_query = f"{niche} companies in {location}{revenue_term} official website"
+        search_query = f"{niche} companies headquartered in {location}{revenue_term} official website"
         raw_markdown = self.serper.search(search_query, num_results=max_results * 3)
+
+        # Phase 2: If revenue constraints are specified, run a second dedicated revenue search
+        # to give the LLM actual financial data to work with
+        has_revenue_filter = bool(min_revenue or max_revenue)
+        if has_revenue_filter:
+            rev_search_query = f"{niche} companies {location} annual revenue turnover financials"
+            print(f"[GeminiService] Step A2: Running dedicated revenue search: '{rev_search_query}'...")
+            revenue_markdown = self.serper.search(rev_search_query, num_results=max_results * 2)
+            raw_markdown += "\n\n### Revenue & Financial Data (Supplementary Search)\n" + revenue_markdown
 
         print("[GeminiService] Step B: Extracting structured company list from search output...")
         
@@ -178,25 +187,48 @@ class GeminiService:
         structured_llm = self.llm_parse.with_structured_output(CompanyList)
         
         if min_revenue and max_revenue:
-            revenue_instruction = f"\nCRITICAL REVENUE CONSTRAINT: Filter and select ONLY companies with estimated annual revenue between '{min_revenue}' and '{max_revenue}'. Exclude companies outside this range."
+            revenue_instruction = (
+                f"\n\nMANDATORY REVENUE FILTER (HARD GATE)\n"
+                f"You MUST only include companies with estimated annual revenue BETWEEN '{min_revenue}' and '{max_revenue}'.\n"
+                f"- If a company's revenue clearly exceeds '{max_revenue}', you MUST EXCLUDE it — even if it matches the niche/location.\n"
+                f"- If a company's revenue is clearly below '{min_revenue}', you MUST EXCLUDE it.\n"
+                f"- If revenue data is unavailable, use employee count as a proxy: "
+                f"~50 employees ≈ ₹5-20Cr, ~200 employees ≈ ₹50-200Cr, ~1000 employees ≈ ₹200-1000Cr, ~5000+ employees ≈ ₹1000Cr+.\n"
+                f"- You MUST populate the 'estimated_revenue' field for every company with your best estimate."
+            )
         elif min_revenue:
-            revenue_instruction = f"\nCRITICAL REVENUE CONSTRAINT: Filter and select ONLY companies with estimated annual revenue of at least '{min_revenue}'. Exclude smaller companies below this threshold."
+            revenue_instruction = (
+                f"\n\nMANDATORY REVENUE FILTER (HARD GATE)\n"
+                f"You MUST only include companies with estimated annual revenue of AT LEAST '{min_revenue}'.\n"
+                f"- Exclude smaller companies below this threshold, even if they match the niche/location.\n"
+                f"- If revenue data is unavailable, use employee count as a proxy.\n"
+                f"- You MUST populate the 'estimated_revenue' field for every company with your best estimate."
+            )
         elif max_revenue:
-            revenue_instruction = f"\nCRITICAL REVENUE CONSTRAINT: Filter and select ONLY companies with estimated annual revenue of no more than '{max_revenue}'."
+            revenue_instruction = (
+                f"\n\nMANDATORY REVENUE FILTER (HARD GATE)\n"
+                f"You MUST only include companies with estimated annual revenue of NO MORE THAN '{max_revenue}'.\n"
+                f"- Exclude large companies above this ceiling, even if they match the niche/location.\n"
+                f"- If revenue data is unavailable, use employee count as a proxy.\n"
+                f"- You MUST populate the 'estimated_revenue' field for every company with your best estimate."
+            )
         else:
             revenue_instruction = ""
 
         parse_prompt = ChatPromptTemplate.from_template(
             "You are an expert B2B market intelligence analyst. Parse the following live Google search results "
-            "about companies in the '{niche}' sector in '{location}' into a clean list of "
+            "about companies in the '{niche}' sector HEADQUARTERED in '{location}' into a clean list of "
             "exactly {max_results} structured company objects.{revenue_instruction}\n\n"
+            "CRITICAL LOCATION CONSTRAINT: Only include companies whose corporate headquarters or registered office "
+            "is located in or near '{location}'. Exclude companies merely operating in '{location}' but headquartered elsewhere.\n\n"
             "Web Search Results:\n{markdown}\n\n"
             "For each company, extract:\n"
             "- name: Official company name\n"
             "- domain: Clean base website domain (e.g. 'tatasteel.com')\n"
             "- industry: Primary business vertical\n"
             "- employee_count: Estimated number of employees (e.g. '500+', '1,000-5,000', '10,000+'). Use 'N/A' if unknown.\n"
-            "- headquarters: City and state/region of headquarters (e.g. 'Pune, Maharashtra'). Use 'N/A' if unknown.\n\n"
+            "- headquarters: City and state/region of headquarters (e.g. 'Pune, Maharashtra'). Use 'N/A' if unknown.\n"
+            "- estimated_revenue: Estimated annual revenue (e.g. '₹50 Cr', '$10M', '₹200-500 Cr'). Use 'N/A' if unknown.\n\n"
             "Only include real, currently active companies. Do not invent or fabricate entries."
         )
         

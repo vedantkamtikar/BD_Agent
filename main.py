@@ -77,6 +77,8 @@ def main():
         "sender_name": "Alex",
         "sender_title": "Lead Consultant",
         "tone": "formal",
+        "draft_emails_enabled": True,
+        "sync_gmail_drafts": False,
         "companies": [],
         "contacts": [],
         "emails": [],
