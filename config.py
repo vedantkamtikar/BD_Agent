@@ -20,6 +20,9 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 GMAIL_CLIENT_SECRETS_FILE = os.getenv("GMAIL_CLIENT_SECRETS_FILE", "client_secrets.json")
 GMAIL_TOKEN_FILE = os.getenv("GMAIL_TOKEN_FILE", "token.json")
 
+# Database configuration (Auto-selects Postgres on Render/Cloud, falls back to SQLite locally)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///leads.db")
+
 # LangSmith / LangChain tracing configuration
 LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")

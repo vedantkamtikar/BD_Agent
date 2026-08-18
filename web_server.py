@@ -1,7 +1,6 @@
 import os
 import uuid
 import time
-import threading
 from datetime import datetime
 from typing import Dict, Any, List
 from fastapi import FastAPI, BackgroundTasks, HTTPException
@@ -16,27 +15,13 @@ from graph import agent
 from models import Company as PydanticCompany, Contact as PydanticContact, EmailDraft as PydanticEmailDraft
 from services.google_sheets import LeadLogger
 
+from database import init_db, SessionLocal, CampaignRun, LeadRow
+init_db()
+
 app = FastAPI(title="B2B Lead-Gen Agent API")
 
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Thread-safe in-memory run database
-runs_db: Dict[str, Dict[str, Any]] = {}
-runs_lock = threading.Lock()
-RUNS_TTL_SECONDS = 2 * 60 * 60  # Evict completed runs older than 2 hours
-
-
-def _cleanup_old_runs():
-    """Evicts completed/failed runs older than RUNS_TTL_SECONDS to prevent memory leaks."""
-    now = time.time()
-    expired = [
-        tid for tid, run in runs_db.items()
-        if run.get("status") in ("completed", "failed")
-        and now - run.get("_created_at", now) > RUNS_TTL_SECONDS
-    ]
-    for tid in expired:
-        del runs_db[tid]
 
 
 class RunRequest(BaseModel):
@@ -73,91 +58,104 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
 
     run_config = {"configurable": {"thread_id": thread_id}}
 
-    with runs_lock:
-        _cleanup_old_runs()
-        runs_db[thread_id] = {
-            "status": "running",
-            "_created_at": time.time(),
-            "logs": [f"[{datetime.now().strftime('%H:%M:%S')}] Pipeline initialized."],
-            "companies": [],
-            "contacts": [],
-            "emails": [],
-            "error": None,
-            "progress": {"percent": 5, "detail": "Initializing pipeline..."}
-        }
+    db = SessionLocal()
+    # Initialize run in DB
+    run = CampaignRun(
+        id=thread_id,
+        niche=niche,
+        location=location,
+        limit=limit,
+        status="running",
+        progress_percent=5,
+        progress_detail="Initializing pipeline..."
+    )
+    run.logs = [f"[{datetime.now().strftime('%H:%M:%S')}] Pipeline initialized."]
+    db.add(run)
+    db.commit()
+
+    accumulated_companies = []
+    accumulated_contacts = []
+    accumulated_emails = []
 
     try:
         for event in agent.stream(initial_state, run_config):
             for node_name, state_update in event.items():
                 ts = datetime.now().strftime("%H:%M:%S")
 
-                with runs_lock:
-                    db = runs_db[thread_id]
-                    db["logs"].append(f"[{ts}] Entered Node: '{node_name}'")
+                # Reload run to prevent detached session errors
+                run = db.query(CampaignRun).filter(CampaignRun.id == thread_id).first()
+                current_logs = run.logs
+                current_logs.append(f"[{ts}] Entered Node: '{node_name}'")
 
-                    for key, val in state_update.items():
-                        if key == "companies":
-                            db["companies"].extend([c.model_dump() for c in val])
-                            db["logs"].append(f"[{ts}] Discovered {len(val)} companies.")
-                            db["progress"] = {"percent": 20, "detail": f"Discovered {len(val)} companies."}
-                        elif key == "contacts":
-                            db["contacts"].extend([c.model_dump() for c in val])
-                            db["logs"].append(f"[{ts}] Discovered {len(val)} contacts.")
-                        elif key == "emails":
-                            db["emails"].extend([e.model_dump() for e in val])
-                            db["logs"].append(f"[{ts}] Generated {len(val)} outreach emails.")
-                            db["progress"] = {"percent": 85, "detail": f"Generated {len(val)} outreach drafts."}
-                        elif key == "logs":
-                            for line in val:
-                                db["logs"].append(f"[{ts}] {line}")
-                                if "create_gmail_drafts" in line:
-                                    db["progress"] = {"percent": 92, "detail": "Syncing drafts to Gmail..."}
-                                elif "[PROGRESS]" in line:
-                                    try:
-                                        parts = line.split(": ", 1)
-                                        if len(parts) == 2:
-                                            nums = parts[1].split("/")
-                                            current = int(nums[0])
-                                            total = int(nums[1])
-                                            step_name = parts[0].replace("[PROGRESS] ", "").strip()
+                for key, val in state_update.items():
+                    if key == "companies":
+                        accumulated_companies.extend([c.model_dump() for c in val])
+                        current_logs.append(f"[{ts}] Discovered {len(val)} companies.")
+                        run.progress_percent = 20
+                        run.progress_detail = f"Discovered {len(val)} companies."
+                    elif key == "contacts":
+                        accumulated_contacts.extend([c.model_dump() for c in val])
+                        current_logs.append(f"[{ts}] Discovered {len(val)} contacts.")
+                    elif key == "emails":
+                        accumulated_emails.extend([e.model_dump() for e in val])
+                        current_logs.append(f"[{ts}] Generated {len(val)} outreach emails.")
+                        run.progress_percent = 85
+                        run.progress_detail = f"Generated {len(val)} outreach drafts."
+                    elif key == "logs":
+                        for line in val:
+                            current_logs.append(f"[{ts}] {line}")
+                            if "create_gmail_drafts" in line:
+                                run.progress_percent = 92
+                                run.progress_detail = "Syncing drafts to Gmail..."
+                            elif "[PROGRESS]" in line:
+                                try:
+                                    parts = line.split(": ", 1)
+                                    if len(parts) == 2:
+                                        nums = parts[1].split("/")
+                                        current = int(nums[0])
+                                        total = int(nums[1])
+                                        step_name = parts[0].replace("[PROGRESS] ", "").strip()
+                                        
+                                        if step_name == "get_contacts":
+                                            pct = 20 + int((current / max(total, 1)) * 40)
+                                            detail = f"Searching contacts ({current}/{total} companies)..."
+                                        elif step_name == "draft_emails":
+                                            pct = 60 + int((current / max(total, 1)) * 25)
+                                            detail = f"Drafting outreach copy ({current}/{total})...."
+                                        else:
+                                            pct = 50
+                                            detail = f"Processing {current}/{total}..."
                                             
-                                            if step_name == "get_contacts":
-                                                pct = 20 + int((current / max(total, 1)) * 40)
-                                                detail = f"Searching contacts ({current}/{total} companies)..."
-                                            elif step_name == "draft_emails":
-                                                pct = 60 + int((current / max(total, 1)) * 25)
-                                                detail = f"Drafting outreach copy ({current}/{total})..."
-                                            else:
-                                                pct = 50
-                                                detail = f"Processing {current}/{total}..."
-                                                
-                                            db["progress"] = {"percent": min(pct, 95), "detail": detail}
-                                    except (ValueError, IndexError):
-                                        pass
+                                        run.progress_percent = min(pct, 95)
+                                        run.progress_detail = detail
+                                except (ValueError, IndexError):
+                                    pass
+                run.logs = current_logs
+                db.commit()
 
         # Convert accumulated dicts back to Pydantic objects
-        # Note: deduplication is already handled in graph nodes (gemini.py / graph.py)
-        companies_obj = [PydanticCompany(**c) for c in runs_db[thread_id]["companies"]]
-        contacts_obj = [PydanticContact(**c) for c in runs_db[thread_id]["contacts"]]
-        emails_obj = [PydanticEmailDraft(**e) for e in runs_db[thread_id]["emails"]]
+        companies_obj = [PydanticCompany(**c) for c in accumulated_companies]
+        contacts_obj = [PydanticContact(**c) for c in accumulated_contacts]
+        emails_obj = [PydanticEmailDraft(**e) for e in accumulated_emails]
 
         # Persist to Google Sheets
-        with runs_lock:
-            runs_db[thread_id]["logs"].append(
-                f"[{datetime.now().strftime('%H:%M:%S')}] Writing leads to Google Sheets..."
-            )
+        run = db.query(CampaignRun).filter(CampaignRun.id == thread_id).first()
+        current_logs = run.logs
+        current_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Writing leads to Google Sheets...")
+        run.logs = current_logs
+        db.commit()
 
         try:
             logger = LeadLogger()
             logger.log_leads(companies_obj, contacts_obj, emails_obj)
         except Exception as sheets_err:
-            with runs_lock:
-                runs_db[thread_id]["logs"].append(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] Sheets warning: {sheets_err}"
-                )
+            run = db.query(CampaignRun).filter(CampaignRun.id == thread_id).first()
+            current_logs = run.logs
+            current_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sheets warning: {sheets_err}")
+            run.logs = current_logs
+            db.commit()
 
-        # Build formatted lead rows for the frontend table
-        lead_rows = []
+        # Build formatted lead rows for the database
         contacts_by_company = {}
         for c in contacts_obj:
             contacts_by_company.setdefault(c.company_name, []).append(c)
@@ -168,49 +166,58 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
         for comp in companies_obj:
             comp_contacts = contacts_by_company.get(comp.name, [])
             if not comp_contacts:
-                lead_rows.append({
-                    "Company Name": comp.name,
-                    "Company Domain": comp.domain or "N/A",
-                    "Industry": comp.industry or "N/A",
-                    "Employees": comp.employee_count or "N/A",
-                    "HQ": comp.headquarters or "N/A",
-                    "Contact Name": "N/A (No contacts found)",
-                    "Contact Title": "N/A",
-                    "LinkedIn URL": "N/A",
-                    "Contact Email": "N/A",
-                    "Email Subject": "N/A",
-                    "Email Body": "N/A"
-                })
+                lead = LeadRow(
+                    run_id=thread_id,
+                    company_name=comp.name,
+                    company_domain=comp.domain or "N/A",
+                    industry=comp.industry or "N/A",
+                    employees=comp.employee_count or "N/A",
+                    hq=comp.headquarters or "N/A",
+                    contact_name="N/A (No contacts found)",
+                    contact_title="N/A",
+                    linkedin_url="N/A",
+                    contact_email="N/A",
+                    email_subject="N/A",
+                    email_body="N/A"
+                )
+                db.add(lead)
             else:
                 for contact in comp_contacts:
                     email_draft = emails_by_contact.get(contact.email)
-                    lead_rows.append({
-                        "Company Name": comp.name,
-                        "Company Domain": comp.domain or "N/A",
-                        "Industry": comp.industry or "N/A",
-                        "Employees": comp.employee_count or "N/A",
-                        "HQ": comp.headquarters or "N/A",
-                        "Contact Name": contact.name,
-                        "Contact Title": contact.title or "N/A",
-                        "LinkedIn URL": getattr(contact, "linkedin_url", None) or "N/A",
-                        "Contact Email": contact.email or "N/A",
-                        "Email Subject": email_draft.subject if email_draft else "N/A",
-                        "Email Body": email_draft.body if email_draft else "N/A"
-                    })
+                    lead = LeadRow(
+                        run_id=thread_id,
+                        company_name=comp.name,
+                        company_domain=comp.domain or "N/A",
+                        industry=comp.industry or "N/A",
+                        employees=comp.employee_count or "N/A",
+                        hq=comp.headquarters or "N/A",
+                        contact_name=contact.name,
+                        contact_title=contact.title or "N/A",
+                        linkedin_url=getattr(contact, "linkedin_url", None) or "N/A",
+                        contact_email=contact.email or "N/A",
+                        email_subject=email_draft.subject if email_draft else "N/A",
+                        email_body=email_draft.body if email_draft else "N/A"
+                    )
+                    db.add(lead)
 
-        with runs_lock:
-            db = runs_db[thread_id]
-            db["status"] = "completed"
-            db["lead_rows"] = lead_rows
-            db["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Pipeline completed successfully.")
+        run = db.query(CampaignRun).filter(CampaignRun.id == thread_id).first()
+        run.status = "completed"
+        current_logs = run.logs
+        current_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Pipeline completed successfully.")
+        run.logs = current_logs
+        db.commit()
 
     except Exception as e:
-        with runs_lock:
-            db = runs_db[thread_id]
-            db["status"] = "failed"
-            db["error"] = str(e)
-            db["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Fatal error: {str(e)}")
-
+        run = db.query(CampaignRun).filter(CampaignRun.id == thread_id).first()
+        if run:
+            run.status = "failed"
+            run.error = str(e)
+            current_logs = run.logs
+            current_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Fatal error: {str(e)}")
+            run.logs = current_logs
+            db.commit()
+    finally:
+        db.close()
 
 
 # --- Routes ---
@@ -229,13 +236,22 @@ def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Niche is required.")
 
     # Concurrency guard: reject if a pipeline is already running
-    with runs_lock:
-        for tid, run in runs_db.items():
-            if run.get("status") == "running":
+    db = SessionLocal()
+    try:
+        active_run = db.query(CampaignRun).filter(CampaignRun.status == "running").first()
+        if active_run:
+            # Check if it is stalled (older than 10 minutes)
+            if (datetime.utcnow() - active_run.created_at).total_seconds() > 10 * 60:
+                active_run.status = "failed"
+                active_run.error = "Pipeline execution stalled / timed out."
+                db.commit()
+            else:
                 raise HTTPException(
                     status_code=409,
                     detail="A pipeline is already running. Please wait for it to complete."
                 )
+    finally:
+        db.close()
 
     thread_id = str(uuid.uuid4())
     background_tasks.add_task(
@@ -257,25 +273,71 @@ def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
 
 @app.get("/api/status/{thread_id}")
 def get_status(thread_id: str):
-    with runs_lock:
-        if thread_id not in runs_db:
+    db = SessionLocal()
+    try:
+        run = db.query(CampaignRun).filter(CampaignRun.id == thread_id).first()
+        if not run:
             raise HTTPException(status_code=404, detail="Thread not found.")
-        return runs_db[thread_id]
+        
+        # Format output matching the expected dictionary layout of frontend
+        return {
+            "status": run.status,
+            "logs": run.logs,
+            "error": run.error,
+            "progress": {
+                "percent": run.progress_percent,
+                "detail": run.progress_detail
+            },
+            "lead_rows": [
+                {
+                    "Company Name": l.company_name,
+                    "Company Domain": l.company_domain,
+                    "Industry": l.industry,
+                    "Employees": l.employees,
+                    "HQ": l.hq,
+                    "Contact Name": l.contact_name,
+                    "Contact Title": l.contact_title,
+                    "LinkedIn URL": l.linkedin_url,
+                    "Contact Email": l.contact_email,
+                    "Email Subject": l.email_subject,
+                    "Email Body": l.email_body
+                }
+                for l in run.leads
+            ]
+        }
+    finally:
+        db.close()
 
 
 @app.get("/api/leads")
 def get_leads():
-    """Returns leads from the most recently completed run (by creation timestamp)."""
-    with runs_lock:
-        latest_leads = []
-        latest_time = 0
-        for tid, run in runs_db.items():
-            if run.get("status") == "completed" and run.get("lead_rows"):
-                created = run.get("_created_at", 0)
-                if created >= latest_time:
-                    latest_time = created
-                    latest_leads = run["lead_rows"]
-        return {"leads": latest_leads}
+    """Returns leads from the most recently completed run."""
+    db = SessionLocal()
+    try:
+        latest_run = db.query(CampaignRun).filter(CampaignRun.status == "completed").order_by(CampaignRun.created_at.desc()).first()
+        if not latest_run:
+            return {"leads": []}
+        
+        return {
+            "leads": [
+                {
+                    "Company Name": l.company_name,
+                    "Company Domain": l.company_domain,
+                    "Industry": l.industry,
+                    "Employees": l.employees,
+                    "HQ": l.hq,
+                    "Contact Name": l.contact_name,
+                    "Contact Title": l.contact_title,
+                    "LinkedIn URL": l.linkedin_url,
+                    "Contact Email": l.contact_email,
+                    "Email Subject": l.email_subject,
+                    "Email Body": l.email_body
+                }
+                for l in latest_run.leads
+            ]
+        }
+    finally:
+        db.close()
 
 
 @app.get("/api/download")

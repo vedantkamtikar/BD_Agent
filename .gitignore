@@ -46,6 +46,8 @@ token.json
 
 # Output files / lead logs
 leads_log.csv
+*.db
+leads.db
 
 # IDE / Editor configurations
 .vscode/

@@ -74,7 +74,7 @@ class LeadLogger:
                                     scopes=scopes
                                 )
                                 print("[GoogleSheetsLogger] Redirecting to Google account authentication flow in your web browser...")
-                                creds = flow.run_local_server(port=0)
+                                creds = flow.run_local_server(port=8080)
                             
                             # Save credentials session for future runs
                             with open(token_path, 'w') as token_file:

@@ -224,7 +224,7 @@ class GeminiService:
             "Web Search Results:\n{markdown}\n\n"
             "For each company, extract:\n"
             "- name: Official company name\n"
-            "- domain: Clean base website domain (e.g. 'tatasteel.com')\n"
+            "- domain: (REQUIRED) The company's official website domain extracted from search result URLs (e.g. 'tatasteel.com'). Strip 'www.' prefix. Do NOT leave blank.\n"
             "- industry: Primary business vertical\n"
             "- employee_count: Estimated number of employees (e.g. '500+', '1,000-5,000', '10,000+'). Use 'N/A' if unknown.\n"
             "- headquarters: City and state/region of headquarters (e.g. 'Pune, Maharashtra'). Use 'N/A' if unknown.\n"
@@ -251,6 +251,27 @@ class GeminiService:
                 seen_keys.add(key)
                 comp.source = f"Serper Search ({niche} in {location})"
                 unique_companies.append(comp)
+
+        # Domain enrichment fallback: for companies with missing domains,
+        # run a quick targeted search to find the official website
+        for comp in unique_companies:
+            if not comp.domain or comp.domain in ("", "n/a", "N/A"):
+                try:
+                    print(f"[GeminiService] Domain missing for '{comp.name}'. Searching for official website...")
+                    domain_md = self.serper.search(f'"{comp.name}" official website', num_results=5)
+                    # Extract domain from search snippets using simple URL pattern matching
+                    import re as _re
+                    url_matches = _re.findall(r'https?://(?:www\.)?([a-zA-Z0-9\-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)', domain_md)
+                    # Filter out search engines and social media
+                    excluded = {"google.com", "linkedin.com", "facebook.com", "twitter.com", "youtube.com", "wikipedia.org", "instagram.com"}
+                    valid_domains = [d.lower() for d in url_matches if d.lower() not in excluded]
+                    if valid_domains:
+                        comp.domain = valid_domains[0]
+                        print(f"[GeminiService] Found domain for '{comp.name}': {comp.domain}")
+                    else:
+                        print(f"[GeminiService] Could not find domain for '{comp.name}'.")
+                except Exception as e:
+                    print(f"[GeminiService] Domain lookup error for '{comp.name}': {e}")
             
         print(f"[GeminiService] Successfully discovered and structured {len(unique_companies)} unique companies.")
         return unique_companies
