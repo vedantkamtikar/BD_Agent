@@ -309,6 +309,31 @@ def get_status(thread_id: str):
         db.close()
 
 
+@app.get("/api/runs")
+def list_runs():
+    """Returns a list of all historical runs for the history sidebar."""
+    db = SessionLocal()
+    try:
+        runs = db.query(CampaignRun).order_by(CampaignRun.created_at.desc()).limit(50).all()
+        return {
+            "runs": [
+                {
+                    "id": r.id,
+                    "niche": r.niche,
+                    "location": r.location,
+                    "limit": r.limit,
+                    "status": r.status,
+                    "created_at": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
+                    "lead_count": len(r.leads),
+                    "error": r.error
+                }
+                for r in runs
+            ]
+        }
+    finally:
+        db.close()
+
+
 @app.get("/api/leads")
 def get_leads():
     """Returns leads from the most recently completed run."""

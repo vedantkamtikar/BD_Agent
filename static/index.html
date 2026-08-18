@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=11">
+    <link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
     <div class="console-shell">
@@ -37,7 +37,47 @@
         </header>
 
         <!-- MAIN LAYOUT GRID -->
-        <div class="console-body">
+        <div class="console-body" id="console-body">
+
+            <!-- COLLAPSIBLE RUN HISTORY SIDEBAR (FAR LEFT) -->
+            <aside class="panel-history" id="panel-history">
+                <div class="history-header">
+                    <div class="history-title-wrap">
+                        <span class="history-code">00</span>
+                        <span class="history-title">RUN HISTORY</span>
+                        <span class="history-count" id="history-count-badge">0</span>
+                    </div>
+                    <button class="history-toggle-btn" id="history-toggle-btn" type="button" title="Collapse run history panel" aria-label="Toggle history panel">
+                        <span class="history-toggle-icon" id="history-toggle-icon">◀</span>
+                    </button>
+                </div>
+
+                <!-- COLLAPSED VERTICAL RAIL BUTTON -->
+                <button class="history-rail-trigger" id="history-rail-trigger" type="button" title="Expand run history panel" aria-label="Expand history panel">
+                    <span class="rail-icon">▶</span>
+                    <span class="rail-text">RUN HISTORY</span>
+                    <span class="rail-badge" id="rail-count-badge">0</span>
+                </button>
+
+                <!-- REFRESH & ACTIONS SUBBAR -->
+                <div class="history-subbar">
+                    <button class="history-action-btn" id="history-refresh-btn" type="button" title="Refresh run history list">
+                        <span class="btn-icon">↻</span> REFRESH
+                    </button>
+                    <button class="history-action-btn new-run-btn" id="history-new-btn" type="button" title="Reset form for new run">
+                        + NEW
+                    </button>
+                </div>
+
+                <!-- SCROLLABLE LIST OF RUNS -->
+                <div class="history-list-wrap">
+                    <div class="history-list" id="history-list">
+                        <div class="history-empty-state">
+                            <span class="empty-dim">NO RUNS RECORDED</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
 
             <!-- CONTROL & MONITOR PANEL (SIDEBAR) -->
             <aside class="panel-control">
@@ -273,6 +313,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=11"></script>
+    <script src="/static/app.js?v=13"></script>
 </body>
 </html>

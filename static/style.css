@@ -214,18 +214,328 @@ html, body {
 /* MAIN CONSOLE BODY */
 .console-body {
     display: grid;
-    grid-template-columns: 360px 1fr;
+    grid-template-columns: 280px 360px 1fr;
     flex: 1;
     min-height: 0;
+    transition: grid-template-columns 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@media (max-width: 1024px) {
+.console-body.history-collapsed {
+    grid-template-columns: 44px 360px 1fr;
+}
+
+@media (max-width: 1200px) {
     .console-body {
+        grid-template-columns: 240px 320px 1fr;
+    }
+    .console-body.history-collapsed {
+        grid-template-columns: 44px 320px 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .console-body {
+        grid-template-columns: 1fr;
+    }
+    .console-body.history-collapsed {
         grid-template-columns: 1fr;
     }
 }
 
-/* CONTROL & MONITOR PANEL (LEFT SIDEBAR) */
+/* ========================================================
+   RUN HISTORY PANEL (FAR LEFT)
+   ======================================================== */
+.panel-history {
+    background-color: var(--bg-surface);
+    border-right: 2px solid var(--border-section);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    user-select: none;
+    height: 100%;
+}
+
+.history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 2px solid var(--border-section);
+    background-color: var(--bg-surface);
+    height: 48px;
+    flex-shrink: 0;
+}
+
+.history-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.history-code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.history-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: var(--text-main);
+}
+
+.history-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 2px;
+    background-color: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+.history-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.15s ease;
+}
+
+.history-toggle-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+    border-color: var(--text-muted);
+}
+
+/* SUBBAR ACTIONS */
+.history-subbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: var(--bg-subtle);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.history-action-btn {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    padding: 5px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+
+.history-action-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+    border-color: var(--text-muted);
+}
+
+.history-action-btn.new-run-btn {
+    background-color: var(--bg-surface);
+    color: var(--text-main);
+}
+
+.history-action-btn.new-run-btn:hover {
+    border-color: var(--signal-running);
+    color: var(--signal-running);
+}
+
+/* LIST OF RUN CARDS */
+.history-list-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 8px;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-empty-state {
+    padding: 30px 10px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.history-card {
+    background-color: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+    padding: 10px 10px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.15s ease;
+    text-align: left;
+    width: 100%;
+}
+
+.history-card:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--text-muted);
+}
+
+.history-card.active {
+    background-color: var(--bg-surface);
+    border-color: var(--border-section);
+    border-left: 3px solid var(--signal-success);
+}
+
+.card-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.card-niche {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-status-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.card-status-tag.completed {
+    color: var(--signal-success);
+    background-color: var(--signal-success-bg);
+    border: 1px solid var(--signal-success-border);
+}
+
+.card-status-tag.running {
+    color: var(--signal-running);
+    background-color: var(--signal-running-bg);
+    border: 1px solid var(--signal-running);
+}
+
+.card-status-tag.failed {
+    color: var(--signal-failed);
+    background-color: var(--signal-failed-bg);
+    border: 1px solid var(--signal-failed);
+}
+
+.card-bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.card-meta-loc {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+
+.card-time {
+    color: var(--text-dim);
+}
+
+/* COLLAPSED STATE RAIL */
+.history-rail-trigger {
+    display: none;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 16px 0;
+    cursor: pointer;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    height: 100%;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.history-rail-trigger:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+}
+
+.rail-icon {
+    font-size: 12px;
+    color: var(--text-main);
+}
+
+.rail-text {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    color: var(--text-muted);
+}
+
+.rail-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 4px;
+    border-radius: 2px;
+    background-color: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+}
+
+/* WHEN COLLAPSED */
+.panel-history.collapsed .history-header,
+.panel-history.collapsed .history-subbar,
+.panel-history.collapsed .history-list-wrap {
+    display: none;
+}
+
+.panel-history.collapsed .history-rail-trigger {
+    display: flex;
+}
+
+/* CONTROL & MONITOR PANEL (LEFT-CENTER SIDEBAR) */
 .panel-control {
     background-color: var(--bg-surface);
     border-right: 2px solid var(--border-section);

@@ -149,7 +149,8 @@ def should_draft(state: LeadState) -> str:
 def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     """
     Node: draft_emails
-    Drafts outreach emails for all verified contacts using company description context.
+    Drafts outreach emails ensuring ONLY ONE primary stakeholder per company receives an email.
+    Contacts are already sorted by role priority (CEO > MD > CHRO).
     """
     print("\n" + "=" * 60)
     print("   [NODE] ENTERING: draft_emails")
@@ -167,22 +168,32 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     company_map = {company.name: company for company in companies}
     total = len(contacts)
     
+    # Track companies that already have an outreach email drafted (1 stakeholder per company)
+    companies_drafted = set()
+    
     for idx, contact in enumerate(contacts, 1):
         company = company_map.get(contact.company_name)
         if not company:
             print(f"[draft_emails] Warning: Could not find matching company '{contact.company_name}' in state.")
             continue
 
-        # Change 4: Skip drafting when no verified email was found
+        # Skip drafting when no verified email was found
         if not contact.email or contact.email == "N/A" or "@" not in contact.email:
             print(f"[draft_emails] [{idx}/{total}] Skipping draft for '{contact.name}' — no verified email found.")
             continue
 
-        print(f"[draft_emails] [{idx}/{total}] Drafting email for '{contact.name}' at '{company.name}'...")
+        # Enforce 1 contact per company limit (highest-ranking stakeholder wins)
+        company_key = company.name.lower().strip()
+        if company_key in companies_drafted:
+            print(f"[draft_emails] [{idx}/{total}] Skipping '{contact.name}' — outreach already drafted for a higher-priority stakeholder at '{company.name}'.")
+            continue
+
+        print(f"[draft_emails] [{idx}/{total}] Drafting email for '{contact.name}' ({contact.title or 'Executive'}) at '{company.name}'...")
         draft = gemini_service.draft_outreach_email(company, contact, sender_name, sender_title, tone)
         email_drafts.append(draft)
+        companies_drafted.add(company_key)
             
-    log_msg = f"draft_emails: Generated {len(email_drafts)} customized email drafts."
+    log_msg = f"draft_emails: Generated {len(email_drafts)} customized email drafts (1 stakeholder per company enforced)."
     print(f"\n[NODE] EXITING: draft_emails -> {log_msg}")
     print("=" * 60 + "\n")
     

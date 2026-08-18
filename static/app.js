@@ -42,12 +42,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const themeToggle  = document.getElementById("theme-toggle");
     const themeLabel   = document.getElementById("theme-label");
 
+    // History Drawer DOM references
+    const consoleBody        = document.getElementById("console-body");
+    const panelHistory       = document.getElementById("panel-history");
+    const historyToggleBtn   = document.getElementById("history-toggle-btn");
+    const historyRailTrigger = document.getElementById("history-rail-trigger");
+    const historyList        = document.getElementById("history-list");
+    const historyCountBadge  = document.getElementById("history-count-badge");
+    const railCountBadge     = document.getElementById("rail-count-badge");
+    const historyRefreshBtn  = document.getElementById("history-refresh-btn");
+    const historyNewBtn      = document.getElementById("history-new-btn");
+
     let pollId = null;
     let logCount = 0;
     let currentLeads = [];
+    let activeHistoryId = null;
 
-    // Initialize Theme
+    // Initialize Theme & History
     initTheme();
+    initHistory();
 
     if (themeToggle) {
         themeToggle.addEventListener("click", () => {
@@ -74,6 +87,161 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             setTheme("dark");
         }
+    }
+
+    // -------------------------------------------------------
+    // RUN HISTORY SIDEBAR MANAGEMENT
+    // -------------------------------------------------------
+    function initHistory() {
+        // Restore collapse preference
+        const isCollapsed = localStorage.getItem("history_collapsed") === "true";
+        setHistoryCollapsed(isCollapsed);
+
+        if (historyToggleBtn) {
+            historyToggleBtn.addEventListener("click", () => {
+                setHistoryCollapsed(true);
+            });
+        }
+
+        if (historyRailTrigger) {
+            historyRailTrigger.addEventListener("click", () => {
+                setHistoryCollapsed(false);
+            });
+        }
+
+        if (historyRefreshBtn) {
+            historyRefreshBtn.addEventListener("click", () => {
+                loadHistory();
+            });
+        }
+
+        if (historyNewBtn) {
+            historyNewBtn.addEventListener("click", () => {
+                activeHistoryId = null;
+                updateActiveHistoryCard();
+                document.getElementById("niche").focus();
+            });
+        }
+
+        loadHistory();
+    }
+
+    function setHistoryCollapsed(collapse) {
+        if (!panelHistory || !consoleBody) return;
+        if (collapse) {
+            panelHistory.classList.add("collapsed");
+            consoleBody.classList.add("history-collapsed");
+        } else {
+            panelHistory.classList.remove("collapsed");
+            consoleBody.classList.remove("history-collapsed");
+        }
+        localStorage.setItem("history_collapsed", collapse ? "true" : "false");
+    }
+
+    async function loadHistory() {
+        if (!historyList) return;
+        try {
+            const res = await fetch("/api/runs");
+            if (!res.ok) return;
+            const data = await res.json();
+            const runs = data.runs || [];
+
+            const countText = runs.length.toString();
+            if (historyCountBadge) historyCountBadge.textContent = countText;
+            if (railCountBadge) railCountBadge.textContent = countText;
+
+            if (!runs.length) {
+                historyList.innerHTML = `
+                    <div class="history-empty-state">
+                        <span class="empty-dim">NO RUNS RECORDED</span>
+                    </div>`;
+                return;
+            }
+
+            historyList.innerHTML = "";
+            runs.forEach((r) => {
+                const card = document.createElement("div");
+                const isActive = (activeHistoryId && activeHistoryId === r.id);
+                card.className = `history-card${isActive ? " active" : ""}`;
+                card.setAttribute("data-run-id", r.id);
+
+                const statusTagClass = r.status === "completed" ? "completed" : (r.status === "running" ? "running" : "failed");
+                const statusLabel = r.status === "completed" ? `${r.lead_count} LEADS` : r.status.toUpperCase();
+
+                card.innerHTML = `
+                    <div class="card-top-row">
+                        <span class="card-niche" title="${esc(r.niche)}">${esc(r.niche)}</span>
+                        <span class="card-status-tag ${statusTagClass}">${statusLabel}</span>
+                    </div>
+                    <div class="card-bottom-row">
+                        <span class="card-meta-loc" title="${esc(r.location)} • ${r.limit} max">${esc(r.location)} • ${r.limit} max</span>
+                        <span class="card-time">${esc(r.created_at || '')}</span>
+                    </div>
+                `;
+
+                card.addEventListener("click", () => {
+                    selectHistoryRun(r.id);
+                });
+
+                historyList.appendChild(card);
+            });
+        } catch (err) {
+            console.error("loadHistory error:", err);
+        }
+    }
+
+    async function selectHistoryRun(threadId) {
+        activeHistoryId = threadId;
+        updateActiveHistoryCard();
+
+        const shortId = threadId ? threadId.slice(0, 8).toUpperCase() : "ACTIVE";
+        threadCode.textContent = `#${shortId}`;
+        threadCode.title = `Full Thread ID: ${threadId}`;
+
+        try {
+            const res = await fetch(`/api/status/${threadId}`);
+            if (!res.ok) throw new Error("Could not fetch run details.");
+            const data = await res.json();
+
+            // Set badge & progress
+            setBadge(data.status || "idle");
+            if (data.status === "completed") {
+                doneAllSteps(data);
+                completeProgress(data);
+            } else if (data.status === "running") {
+                updateProgress(data.progress || { percent: 50, detail: "In progress..." });
+            }
+
+            // Populate logs
+            clearConsole();
+            if (data.logs && data.logs.length) {
+                data.logs.forEach(line => {
+                    let cls = "";
+                    if (line.includes("Node:") || line.includes("ENTERING:")) cls = "node";
+                    else if (line.includes("Success") || line.includes("successfully") || line.includes("completed")) cls = "success";
+                    else if (line.includes("Error") || line.includes("failed") || line.includes("Fatal")) cls = "error";
+                    log(line, cls);
+                });
+                logCount = data.logs.length;
+                if (logCountTag) logCountTag.textContent = `${logCount} LINES`;
+            }
+
+            // Populate lead rows
+            renderTable(data.lead_rows || []);
+        } catch (err) {
+            console.error("selectHistoryRun error:", err);
+        }
+    }
+
+    function updateActiveHistoryCard() {
+        document.querySelectorAll(".history-card").forEach(c => {
+            const rid = c.getAttribute("data-run-id");
+            if (activeHistoryId && rid === activeHistoryId) {
+                c.classList.add("active");
+            } else {
+                c.classList.remove("active");
+            }
+        });
     }
 
     // Load initial lead records
@@ -136,6 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
             threadCode.title = `Full Thread ID: ${data.thread_id}`;
 
             startPolling(data.thread_id);
+            loadHistory();
         } catch (err) {
             log(`[ERROR] ${err.message}`, "error");
             setBadge("failed");
@@ -183,6 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     setLoading(false);
                     doneAllSteps(data);
                     completeProgress(data);
+                    loadHistory();
 
                     if (data.lead_rows && data.lead_rows.length) {
                         renderTable(data.lead_rows);
@@ -193,6 +363,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     clearInterval(pollId);
                     setBadge("failed");
                     setLoading(false);
+                    loadHistory();
                     log(`[FATAL] ${data.error || "Execution error"}`, "error");
                 }
             } catch (err) {
