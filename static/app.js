@@ -538,12 +538,47 @@ document.addEventListener("DOMContentLoaded", () => {
         if (stepGmailMeta) stepGmailMeta.textContent = "Pending";
     }
 
+    function extractCounts(data, logs) {
+        let compCount = 0;
+        let contCount = 0;
+        let emailCount = 0;
+
+        const rows = (data && data.lead_rows && data.lead_rows.length) ? data.lead_rows : (currentLeads || []);
+        if (rows && rows.length) {
+            const uniqueCompanies = new Set(rows.map(r => r["Company Name"]).filter(Boolean));
+            compCount = uniqueCompanies.size;
+
+            const validContacts = rows.filter(r => r["Contact Name"] && !r["Contact Name"].includes("No contacts found") && r["Contact Name"] !== "N/A");
+            contCount = validContacts.length;
+
+            const draftedEmails = rows.filter(r => r["Email Subject"] && r["Email Subject"] !== "N/A" && !r["Email Subject"].includes("skipped"));
+            emailCount = draftedEmails.length;
+        }
+
+        // Check logs as supplementary source if rows are not populated yet
+        if (logs && Array.isArray(logs)) {
+            logs.forEach(line => {
+                const compMatch = line.match(/Discovered (\d+) companies/i);
+                if (compMatch) compCount = Math.max(compCount, parseInt(compMatch[1], 10));
+
+                const contMatch = line.match(/Discovered (\d+) contacts/i);
+                if (contMatch) contCount = Math.max(contCount, parseInt(contMatch[1], 10));
+
+                const draftMatch = line.match(/Generated (\d+) (?:customized )?email drafts/i);
+                if (draftMatch) emailCount = Math.max(emailCount, parseInt(draftMatch[1], 10));
+            });
+        }
+
+        return { compCount, contCount, emailCount };
+    }
+
     function doneAllSteps(data) {
         allSteps.forEach(s => { s.classList.remove("active"); s.classList.add("done"); });
         
-        const compCount = data && data.companies ? data.companies.length : 0;
-        const contCount = data && data.contacts ? data.contacts.length : 0;
-        const emailCount = data && data.emails ? data.emails.length : 0;
+        const counts = extractCounts(data, data ? data.logs : []);
+        const compCount = counts.compCount;
+        const contCount = counts.contCount;
+        const emailCount = counts.emailCount;
 
         stepSearchMeta.innerHTML = `<span class="step-check">✓</span> ${compCount} found`;
         stepContactsMeta.innerHTML = `<span class="step-check">✓</span> ${contCount} found`;
@@ -565,9 +600,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const draft    = joined.includes("draft_emails");
         const gmail    = joined.includes("create_gmail_drafts");
 
-        const compCount = data && data.companies ? data.companies.length : 0;
-        const contCount = data && data.contacts ? data.contacts.length : 0;
-        const emailCount = data && data.emails ? data.emails.length : 0;
+        const counts = extractCounts(data, logs);
+        const compCount = counts.compCount;
+        const contCount = counts.contCount;
+        const emailCount = counts.emailCount;
 
         if (gmail) {
             setStepDone(stepSearch, stepSearchMeta, `✓ ${compCount || ''} found`);

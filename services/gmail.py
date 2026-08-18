@@ -61,12 +61,17 @@ class GmailService:
             if not creds:
                 if os.path.exists(self.client_secrets_file):
                     print(f"[GmailService] Authenticating via '{self.client_secrets_file}'...")
-                    flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, SCOPES)
-                    creds = flow.run_local_server(port=8080)
-                    # Save the credentials for next run
-                    with open(self.token_file, "w") as token:
-                        token.write(creds.to_json())
-                    print(f"[GmailService] Saved OAuth token to '{self.token_file}'.")
+                    try:
+                        flow = InstalledAppFlow.from_client_secrets_file(self.client_secrets_file, SCOPES)
+                        creds = flow.run_local_server(port=8080)
+                        # Save the credentials for next run
+                        with open(self.token_file, "w") as token:
+                            token.write(creds.to_json())
+                        print(f"[GmailService] Saved OAuth token to '{self.token_file}'.")
+                    except Exception as flow_err:
+                        print(f"[GmailService] Notice: Could not open browser for interactive login ({flow_err}).")
+                        print("[GmailService] If running on Render or in a headless environment, provide 'token.json' as a Secret File.")
+                        creds = None
                 else:
                     print(f"[GmailService] Warning: Neither '{self.token_file}' nor '{self.client_secrets_file}' found.")
                     return

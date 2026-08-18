@@ -68,24 +68,31 @@ class LeadLogger:
                         if not creds or not creds.valid:
                             if creds and creds.expired and creds.refresh_token:
                                 creds.refresh(Request())
-                            else:
-                                flow = InstalledAppFlow.from_client_secrets_file(
-                                    self.creds_path,
-                                    scopes=scopes
-                                )
-                                print("[GoogleSheetsLogger] Redirecting to Google account authentication flow in your web browser...")
-                                creds = flow.run_local_server(port=8080)
-                            
-                            # Save credentials session for future runs
-                            with open(token_path, 'w') as token_file:
-                                token_file.write(creds.to_json())
+                                try:
+                                    flow = InstalledAppFlow.from_client_secrets_file(
+                                        self.creds_path,
+                                        scopes=scopes
+                                    )
+                                    print("[GoogleSheetsLogger] Redirecting to Google account authentication flow in your web browser...")
+                                    creds = flow.run_local_server(port=8080)
+                                    
+                                    # Save credentials session for future runs
+                                    with open(token_path, 'w') as token_file:
+                                        token_file.write(creds.to_json())
+                                except Exception as auth_err:
+                                    print(f"[GoogleSheetsLogger] Notice: Could not open browser for interactive login ({auth_err}). Using local CSV fallback.")
+                                    creds = None
                         
-                        print("[GoogleSheetsLogger] Using User OAuth 2.0 authentication credentials.")
+                        if creds:
+                            print("[GoogleSheetsLogger] Using User OAuth 2.0 authentication credentials.")
                     
-                    self.service = build('sheets', 'v4', credentials=creds)
-                    self.use_sheets = True
-                    print("[GoogleSheetsLogger] Initialized Google Sheets API service successfully.")
-                    self._initialize_sheets_header_if_empty()
+                    if creds:
+                        self.service = build('sheets', 'v4', credentials=creds)
+                        self.use_sheets = True
+                        print("[GoogleSheetsLogger] Initialized Google Sheets API service successfully.")
+                        self._initialize_sheets_header_if_empty()
+                    else:
+                        print("[GoogleSheetsLogger] Google Sheets credentials not active. Using local CSV fallback.")
                 else:
                     print(f"[GoogleSheetsLogger] Key file not found at '{self.creds_path}'. Using local CSV fallback.")
             except Exception as e:
