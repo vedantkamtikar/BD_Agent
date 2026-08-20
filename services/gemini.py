@@ -604,6 +604,7 @@ class GeminiService:
 
         print(f"[GeminiService] Drafting outreach email to '{contact.name}' ({contact.title or 'Executive'}) at '{company.name}' (tone: {tone})...")
         
+        first_name = contact.name.split()[0] if contact.name else "there"
         email_prompt = (
             f"You are a professional B2B cold email copywriter. Write a highly personalized, extremely short, and direct "
             f"outreach email to {contact.name} ({contact.title or 'executive'}) at {company.name} (website: {company.domain or 'unknown'}).\n\n"
@@ -612,7 +613,14 @@ class GeminiService:
             f"1. Subject line: Catchy, highly relevant, and professional. Mention Catenon or Executive Search/Talent Acquisition.\n"
             f"2. Email body: Keep it very short, concise, and direct (under 80 words). State clearly that the sender is from Catenon (global executive search firm) and get straight to the point.\n"
             f"3. Tone & Style: {style_instruction}\n"
-            f"4. Sign off with '{sender_name}, {sender_title}' and do not include physical addresses.\n\n"
+            f"4. FORMATTING & LINE BREAKS (CRITICAL):\n"
+            f"   - Greeting on its own line: 'Dear {first_name},' or 'Hi {first_name},'\n"
+            f"   - Blank line before the body paragraph.\n"
+            f"   - Blank line before the sign-off.\n"
+            f"   - Sign-off and sender info MUST be on separate lines:\n"
+            f"     Best regards,\n"
+            f"     {sender_name}\n"
+            f"     {sender_title}\n\n"
             f"The output must match the EmailDraft structured output schema."
         )
 
@@ -623,6 +631,24 @@ class GeminiService:
         email_draft.contact_name = contact.name
         email_draft.contact_email = contact.email or "unknown@email.com"
         email_draft.company_name = company.name
+
+        # Post-process body to guarantee proper line breaks
+        if email_draft.body:
+            b = email_draft.body.strip()
+            # Ensure double newline before sign-off
+            for signoff in ["Best regards,", "Best regards", "Warm regards,", "Kind regards,", "Best,", "Regards,"]:
+                if signoff in b and f"\n\n{signoff}" not in b:
+                    b = b.replace(f" {signoff}", f"\n\n{signoff}").replace(f"? {signoff}", f"?\n\n{signoff}").replace(f".{signoff}", f".\n\n{signoff}")
+                # Separate sender name and title below the sign-off
+                if signoff in b:
+                    parts = b.rsplit(signoff, 1)
+                    sig = parts[1]
+                    if f"{sender_name}, {sender_title}" in sig:
+                        sig = sig.replace(f"{sender_name}, {sender_title}", f"\n{sender_name}\n{sender_title}")
+                    elif f"{sender_name} - {sender_title}" in sig:
+                        sig = sig.replace(f"{sender_name} - {sender_title}", f"\n{sender_name}\n{sender_title}")
+                    b = parts[0] + signoff + sig
+            email_draft.body = b
         
         print(f"[GeminiService] Email drafted successfully (Subject: '{email_draft.subject}').")
         return email_draft

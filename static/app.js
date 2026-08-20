@@ -158,6 +158,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
+            if (!activeHistoryId && runs.length > 0) {
+                activeHistoryId = runs[0].id;
+                const shortId = runs[0].id.slice(0, 8).toUpperCase();
+                threadCode.textContent = `#${shortId}`;
+                threadCode.title = `Full Thread ID: ${runs[0].id}`;
+            }
+
             historyList.innerHTML = "";
             runs.forEach((r) => {
                 const card = document.createElement("div");

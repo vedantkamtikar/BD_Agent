@@ -1,0 +1,60 @@
+================================================================================
+                    B2B LEAD-GENERATION AI AGENT — PROJECT BRIEF
+================================================================================
+
+1. OBJECTIVE
+--------------------------------------------------------------------------------
+The B2B Lead-Generation Agent is an autonomous pipeline built for sales, business
+development, and executive recruitment teams (e.g., Catenon). Given a target
+market niche, headquarters location, and revenue filters, it automatically:
+  1. Discovers verified, headquartered companies in that vertical.
+  2. Identifies key decision-makers (CEO, MD, CHRO) along with LinkedIn URLs.
+  3. Hunts and verifies business email addresses for executive stakeholders.
+  4. Generates personalized cold outreach emails (1 per company).
+  5. Syncs drafted outreach directly into the operator's official Gmail Drafts
+     folder and logs leads to Google Sheets / SQLite / PostgreSQL databases.
+
+--------------------------------------------------------------------------------
+2. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+• Orchestration & Workflow : LangGraph (State Graph with conditional routing)
+• LLM & Intelligence       : Google Gemini API (gemini-3.5-flash-lite)
+• Live Web & Search Engine : Serper.dev REST API (Google Search & LinkedIn grounding)
+• Backend Web Server       : FastAPI (ASGI), Uvicorn, Python 3.13
+• Persistence & Database   : SQLAlchemy (PostgreSQL on Render, SQLite local fallback)
+• External Integrations    : Google Gmail API (OAuth 2.0 Drafts), Google Sheets API
+• Data Validation          : Pydantic v2 (Strict typing, structured JSON extraction)
+• Frontend Dashboard       : Vanilla HTML5, CSS3, JavaScript (Real-time polling UI)
+
+--------------------------------------------------------------------------------
+3. HOW IT WORKS (THE AGENT PIPELINE)
+--------------------------------------------------------------------------------
+The agent operates as a 4-stage sequential state machine managed by LangGraph:
+
+  [01: search_companies]
+  Searches the live web via Serper.dev for companies headquartered in the target
+  region and revenue range. Gemini extracts company names, domains, industries,
+  and estimated annual revenues into strict Pydantic schemas.
+
+  [02: get_contacts]
+  Queries Google & LinkedIn for top-tier executives (CEO > MD > CHRO). Executes
+  a multi-step email hunting heuristic to discover verified professional emails.
+
+  [03: draft_emails] (Conditional Edge)
+  If email drafting is enabled and verified emails exist, Gemini crafts concise,
+  tailored outreach copy mentioning Catenon's executive search capabilities.
+  Enforces a strict 1-email-per-company rule targeting the senior-most executive.
+
+  [04: create_gmail_drafts]
+  Connects to the Gmail API via OAuth 2.0 (`gmail.compose` scope) and creates
+  ready-to-send draft messages directly in the user's Gmail Drafts box.
+
+--------------------------------------------------------------------------------
+4. OPERATOR CONSOLE & RUN HISTORY
+--------------------------------------------------------------------------------
+• Interactive UI   : Parameters panel, real-time workflow tracker, & terminal logs.
+• Run History      : Collapsible left sidebar (`00 / RUN HISTORY`) to view, reload,
+                     and inspect leads/drafts from past campaigns at any time.
+• Multi-Cloud Host : Deploys locally with zero setup (SQLite), or in the cloud
+                     (Render + managed PostgreSQL).
+================================================================================
