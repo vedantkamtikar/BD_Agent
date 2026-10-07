@@ -43,11 +43,13 @@ def main():
     parser.add_argument("--niche", type=str, help="Target industry or niche")
     parser.add_argument("--location", type=str, default="United States", help="Location filter")
     parser.add_argument("--limit", type=int, default=3, help="Max companies to search")
+    parser.add_argument("--csr", "--csr-focus", dest="csr_focus", type=str, default="", help="Optional CSR focus area (e.g. 'Education', 'Healthcare')")
     args, _ = parser.parse_known_args()
 
     target_niche = args.niche
     location = args.location
     max_results = args.limit
+    csr_focus = args.csr_focus
 
     if not target_niche:
         try:
@@ -63,6 +65,10 @@ def main():
             max_results_str = input("Enter max number of companies to discover (default: 3): ").strip()
             if max_results_str.isdigit():
                 max_results = int(max_results_str)
+
+            csr_input = input("Enter optional CSR focus (e.g. 'Education', 'Sustainability' or press Enter to skip): ").strip()
+            if csr_input:
+                csr_focus = csr_input
         except KeyboardInterrupt:
             print("\nExiting CLI run...")
             sys.exit(0)
@@ -74,6 +80,7 @@ def main():
         "max_results": max_results,
         "min_revenue": "",
         "max_revenue": "",
+        "csr_focus": csr_focus,
         "sender_name": "Alex",
         "sender_title": "Lead Consultant",
         "tone": "formal",

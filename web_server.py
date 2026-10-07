@@ -30,6 +30,7 @@ class RunRequest(BaseModel):
     limit: int = 3
     min_revenue: str = ""
     max_revenue: str = ""
+    csr_focus: str = ""
     sender_name: str = "Alex"
     sender_title: str = "Lead Consultant"
     tone: str = "formal"
@@ -37,7 +38,7 @@ class RunRequest(BaseModel):
     sync_gmail_drafts: bool = True
 
 
-def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, min_revenue: str, max_revenue: str, sender_name: str, sender_title: str, tone: str, draft_emails_enabled: bool = True, sync_gmail_drafts: bool = True):
+def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, min_revenue: str, max_revenue: str, csr_focus: str, sender_name: str, sender_title: str, tone: str, draft_emails_enabled: bool = True, sync_gmail_drafts: bool = True):
     """Executes the LangGraph agent on a background thread."""
     initial_state = {
         "target_niche": niche,
@@ -45,6 +46,7 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
         "max_results": limit,
         "min_revenue": min_revenue,
         "max_revenue": max_revenue,
+        "csr_focus": csr_focus,
         "sender_name": sender_name,
         "sender_title": sender_title,
         "tone": tone,
@@ -65,6 +67,7 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
         niche=niche,
         location=location,
         limit=limit,
+        csr_focus=csr_focus,
         status="running",
         progress_percent=5,
         progress_detail="Initializing pipeline..."
@@ -165,6 +168,7 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
 
         for comp in companies_obj:
             comp_contacts = contacts_by_company.get(comp.name, [])
+            csr_val = getattr(comp, "csr_details", None) or "N/A"
             if not comp_contacts:
                 lead = LeadRow(
                     run_id=thread_id,
@@ -173,6 +177,7 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
                     industry=comp.industry or "N/A",
                     employees=comp.employee_count or "N/A",
                     hq=comp.headquarters or "N/A",
+                    csr_details=csr_val,
                     contact_name="N/A (No contacts found)",
                     contact_title="N/A",
                     linkedin_url="N/A",
@@ -191,6 +196,7 @@ def run_agent_workflow(thread_id: str, niche: str, location: str, limit: int, mi
                         industry=comp.industry or "N/A",
                         employees=comp.employee_count or "N/A",
                         hq=comp.headquarters or "N/A",
+                        csr_details=csr_val,
                         contact_name=contact.name,
                         contact_title=contact.title or "N/A",
                         linkedin_url=getattr(contact, "linkedin_url", None) or "N/A",
@@ -262,6 +268,7 @@ def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
         limit=request.limit,
         min_revenue=request.min_revenue,
         max_revenue=request.max_revenue,
+        csr_focus=request.csr_focus,
         sender_name=request.sender_name,
         sender_title=request.sender_title,
         tone=request.tone,
@@ -295,6 +302,7 @@ def get_status(thread_id: str):
                     "Industry": l.industry,
                     "Employees": l.employees,
                     "HQ": l.hq,
+                    "CSR Details": getattr(l, "csr_details", "N/A") or "N/A",
                     "Contact Name": l.contact_name,
                     "Contact Title": l.contact_title,
                     "LinkedIn URL": l.linkedin_url,
@@ -322,6 +330,7 @@ def list_runs():
                     "niche": r.niche,
                     "location": r.location,
                     "limit": r.limit,
+                    "csr_focus": getattr(r, "csr_focus", "") or "",
                     "status": r.status,
                     "created_at": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
                     "lead_count": len(r.leads),
@@ -351,6 +360,7 @@ def get_leads():
                     "Industry": l.industry,
                     "Employees": l.employees,
                     "HQ": l.hq,
+                    "CSR Details": getattr(l, "csr_details", "N/A") or "N/A",
                     "Contact Name": l.contact_name,
                     "Contact Title": l.contact_title,
                     "LinkedIn URL": l.linkedin_url,

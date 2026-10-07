@@ -12,6 +12,7 @@ class Company(BaseModel):
     employee_count: Optional[str] = Field(None, description="Estimated number of employees (e.g., '500+', '1,000-5,000').")
     headquarters: Optional[str] = Field(None, description="The city/state where the company is headquartered (e.g., 'Pune, Maharashtra').")
     estimated_revenue: Optional[str] = Field(None, description="Estimated annual revenue of the company (e.g., '₹50 Cr', '$10M', '₹200-500 Cr'). Use 'N/A' if unknown.")
+    csr_details: Optional[str] = Field(None, description="Corporate Social Responsibility (CSR) initiatives, foundation, or focus areas (e.g., 'Education & Skill Development', 'Rural Healthcare & Sanitation', 'Sustainability & Green Energy'). Use 'N/A' if unknown.")
     source: Optional[str] = Field(None, description="The search query or contextual source from which the company was found.")
 
 

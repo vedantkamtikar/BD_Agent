@@ -22,6 +22,7 @@ class LeadState(TypedDict):
     max_results: int
     min_revenue: str
     max_revenue: str
+    csr_focus: str
     sender_name: str
     sender_title: str
     tone: str
@@ -48,16 +49,18 @@ def search_companies_node(state: LeadState) -> Dict[str, Any]:
     max_results = state.get("max_results", 5)
     min_revenue = state.get("min_revenue", "")
     max_revenue = state.get("max_revenue", "")
+    csr_focus = state.get("csr_focus", "")
     
     # Discover companies
-    companies = gemini_service.search_companies(niche, location, max_results, min_revenue, max_revenue)
+    companies = gemini_service.search_companies(niche, location, max_results, min_revenue, max_revenue, csr_focus=csr_focus)
     
     rev_parts = []
     if min_revenue: rev_parts.append(f"Min: {min_revenue}")
     if max_revenue: rev_parts.append(f"Max: {max_revenue}")
     revenue_info = f" (Revenue Range: {', '.join(rev_parts)})" if rev_parts else ""
+    csr_info = f" (CSR Focus: {csr_focus})" if csr_focus else ""
     
-    log_msg = f"search_companies: Found {len(companies)} companies in '{niche}' ({location}){revenue_info}."
+    log_msg = f"search_companies: Found {len(companies)} companies in '{niche}' ({location}){revenue_info}{csr_info}."
     print(f"\n[NODE] EXITING: search_companies -> {log_msg}")
     print("=" * 60 + "\n")
     

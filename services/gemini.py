@@ -133,47 +133,58 @@ class GeminiService:
         )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
-    def search_companies(self, niche: str, location: str, max_results: int = 5, min_revenue: str = "", max_revenue: str = "") -> List[Company]:
+    def search_companies(self, niche: str, location: str, max_results: int = 5, min_revenue: str = "", max_revenue: str = "", csr_focus: str = "") -> List[Company]:
         """
         Step 1 (Search): Searches for real companies in the target niche/location using Google search grounding,
-        optionally filtering by minimum and maximum revenue range criteria.
-        Step 2 (Parse): Converts the unstructured search output into a list of Company Pydantic models.
+        optionally filtering by revenue range criteria and CSR (Corporate Social Responsibility) focus areas.
+        Step 2 (Parse): Converts the unstructured search output into a list of Company Pydantic models with CSR details.
         """
         rev_parts = []
         if min_revenue: rev_parts.append(f"Min: {min_revenue}")
         if max_revenue: rev_parts.append(f"Max: {max_revenue}")
         revenue_log_str = f" (Revenue Range: {', '.join(rev_parts)})" if rev_parts else ""
+        csr_log_str = f" (CSR Focus: {csr_focus})" if csr_focus else ""
 
         if config.MOCK_LLM:
-            print(f"[GeminiService] [MOCK MODE] Simulating company discovery for '{niche}' in '{location}'{revenue_log_str}...")
+            print(f"[GeminiService] [MOCK MODE] Simulating company discovery for '{niche}' in '{location}'{revenue_log_str}{csr_log_str}...")
             niche_slug = niche.replace(" ", "").lower()
             companies = []
+            mock_csr_themes = [
+                "Education & Digital Literacy in Rural Schools",
+                "Healthcare Access & Mobile Health Clinics",
+                "Renewable Energy & Water Conservation",
+                "Women Empowerment & Skill Development",
+                "Sustainable Agriculture & Community Forestry"
+            ]
             for i in range(1, max_results + 1):
                 name = f"Mock {niche.title()} Corp {i}"
                 domain = f"mock{niche_slug}{i}.com"
+                csr_theme = f"{csr_focus} Initiatives" if csr_focus else mock_csr_themes[(i - 1) % len(mock_csr_themes)]
                 companies.append(Company(
                     name=name,
                     domain=domain,
                     industry=niche,
                     employee_count="500+",
                     headquarters=location,
+                    estimated_revenue="₹50-100 Cr",
+                    csr_details=csr_theme,
                     source="Mock Local Generator"
                 ))
-            print(f"[GeminiService] [MOCK MODE] Generated {len(companies)} simulated companies.")
+            print(f"[GeminiService] [MOCK MODE] Generated {len(companies)} simulated companies with CSR details.")
             return companies
 
-        print(f"[GeminiService] Step A: Searching web for {max_results} '{niche}' companies headquartered in '{location}'{revenue_log_str}...")
+        print(f"[GeminiService] Step A: Searching web for {max_results} '{niche}' companies headquartered in '{location}'{revenue_log_str}{csr_log_str}...")
         
         query_rev = []
         if min_revenue: query_rev.append(f"minimum annual revenue {min_revenue}")
         if max_revenue: query_rev.append(f"maximum annual revenue {max_revenue}")
         revenue_term = f" {' '.join(query_rev)}" if query_rev else ""
+        csr_query_term = f" CSR corporate social responsibility {csr_focus}" if csr_focus else ""
 
-        search_query = f"{niche} companies headquartered in {location}{revenue_term} official website"
+        search_query = f"{niche} companies headquartered in {location}{revenue_term}{csr_query_term} official website"
         raw_markdown = self.serper.search(search_query, num_results=max_results * 3)
 
-        # Phase 2: If revenue constraints are specified, run a second dedicated revenue search
-        # to give the LLM actual financial data to work with
+        # Phase 2: If revenue constraints are specified, run a dedicated revenue search
         has_revenue_filter = bool(min_revenue or max_revenue)
         if has_revenue_filter:
             rev_search_query = f"{niche} companies {location} annual revenue turnover financials"
@@ -181,7 +192,14 @@ class GeminiService:
             revenue_markdown = self.serper.search(rev_search_query, num_results=max_results * 2)
             raw_markdown += "\n\n### Revenue & Financial Data (Supplementary Search)\n" + revenue_markdown
 
-        print("[GeminiService] Step B: Extracting structured company list from search output...")
+        # Phase 3: Supplementary search for CSR focus or initiatives
+        if csr_focus:
+            csr_search_query = f"{niche} companies {location} CSR corporate social responsibility foundation {csr_focus}"
+            print(f"[GeminiService] Step A3: Running dedicated CSR focus search: '{csr_search_query}'...")
+            csr_markdown = self.serper.search(csr_search_query, num_results=max_results * 2)
+            raw_markdown += "\n\n### CSR & Community Initiatives (Supplementary Search)\n" + csr_markdown
+
+        print("[GeminiService] Step B: Extracting structured company list with CSR details from search output...")
         
         # Bind the CompanyList Pydantic schema to the parser LLM
         structured_llm = self.llm_parse.with_structured_output(CompanyList)
@@ -215,10 +233,22 @@ class GeminiService:
         else:
             revenue_instruction = ""
 
+        if csr_focus:
+            csr_instruction = (
+                f"\n\nCSR FOCUS DIRECTIVE\n"
+                f"Target / prioritize companies with active CSR (Corporate Social Responsibility) initiatives in '{csr_focus}'.\n"
+                f"In the 'csr_details' field, summarize the specific CSR programs, foundation activities, or impact areas discovered."
+            )
+        else:
+            csr_instruction = (
+                f"\n\nCSR DETAILS EXTRACTION\n"
+                f"In the 'csr_details' field, concisely summarize the company's notable CSR programs, foundation work, or sustainability initiatives (e.g. 'Education & Skill Building', 'Rural Healthcare & Sanitation', 'Renewable Energy & Afforestation'). If not found in search results, use 'N/A'."
+            )
+
         parse_prompt = ChatPromptTemplate.from_template(
             "You are an expert B2B market intelligence analyst. Parse the following live Google search results "
             "about companies in the '{niche}' sector HEADQUARTERED in '{location}' into a clean list of "
-            "exactly {max_results} structured company objects.{revenue_instruction}\n\n"
+            "exactly {max_results} structured company objects.{revenue_instruction}{csr_instruction}\n\n"
             "CRITICAL LOCATION CONSTRAINT: Only include companies whose corporate headquarters or registered office "
             "is located in or near '{location}'. Exclude companies merely operating in '{location}' but headquartered elsewhere.\n\n"
             "Web Search Results:\n{markdown}\n\n"
@@ -228,7 +258,8 @@ class GeminiService:
             "- industry: Primary business vertical\n"
             "- employee_count: Estimated number of employees (e.g. '500+', '1,000-5,000', '10,000+'). Use 'N/A' if unknown.\n"
             "- headquarters: City and state/region of headquarters (e.g. 'Pune, Maharashtra'). Use 'N/A' if unknown.\n"
-            "- estimated_revenue: Estimated annual revenue (e.g. '₹50 Cr', '$10M', '₹200-500 Cr'). Use 'N/A' if unknown.\n\n"
+            "- estimated_revenue: Estimated annual revenue (e.g. '₹50 Cr', '$10M', '₹200-500 Cr'). Use 'N/A' if unknown.\n"
+            "- csr_details: Summary of company's CSR initiatives, foundation, or sustainability focus areas (e.g. 'Education & Vocational Training', 'Healthcare & Clean Water'). Use 'N/A' if unknown.\n\n"
             "Only include real, currently active companies. Do not invent or fabricate entries."
         )
         
@@ -238,7 +269,8 @@ class GeminiService:
             "niche": niche,
             "location": location,
             "max_results": str(max_results),
-            "revenue_instruction": revenue_instruction
+            "revenue_instruction": revenue_instruction,
+            "csr_instruction": csr_instruction
         })
         
         # Normalize domains and deduplicate companies

@@ -265,6 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const limit      = parseInt(document.getElementById("limit").value, 10);
         const minRevenue = (document.getElementById("min-revenue")?.value || "").trim();
         const maxRevenue = (document.getElementById("max-revenue")?.value || "").trim();
+        const csrFocus   = (document.getElementById("csr-focus")?.value || "").trim();
         const senderName = document.getElementById("sender-name").value.trim();
         const senderTitle = document.getElementById("sender-title").value.trim();
         const tone       = document.getElementById("outreach-tone").value;
@@ -291,6 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     limit,
                     min_revenue: minRevenue,
                     max_revenue: maxRevenue,
+                    csr_focus: csrFocus,
                     sender_name: senderName,
                     sender_title: senderTitle,
                     tone,
@@ -398,7 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!currentLeads.length) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="table-empty-cell">
+                    <td colspan="7" class="table-empty-cell">
                         <div class="empty-state-box">
                             <span class="empty-code">NO DATA AVAILABLE</span>
                             <p class="empty-msg">Configure execution parameters in Panel 01 and trigger the pipeline to discover decision-makers.</p>
@@ -421,6 +423,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const domain = lead["Company Domain"];
             const domainHtml = (domain && domain !== "N/A")
                 ? `<a href="https://${domain}" target="_blank" rel="noopener" class="domain-link" title="${esc(domain)}">${esc(domain)}</a>`
+                : `<span class="cell-sub">N/A</span>`;
+
+            const csrDetails = esc(lead["CSR Details"] || "N/A");
+            const csrHtml = (csrDetails && csrDetails !== "N/A")
+                ? `<span class="csr-tag" title="${csrDetails}">${csrDetails}</span>`
                 : `<span class="cell-sub">N/A</span>`;
 
             const contactName = esc(lead["Contact Name"] || "N/A");
@@ -451,6 +458,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 </td>
                 <td title="${esc(lead["Industry"] || "N/A")}">
                     <span class="industry-tag">${esc(lead["Industry"] || "N/A")}</span>
+                </td>
+                <td title="${csrDetails}">
+                    ${csrHtml}
                 </td>
                 <td title="${contactName} - ${contactTitle}">
                     <div class="cell-primary">${contactName}</div>
@@ -512,7 +522,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // CSV Export
     downloadBtn.addEventListener("click", () => {
         if (!currentLeads.length) return;
-        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "Contact Name", "Contact Title", "LinkedIn URL", "Contact Email"];
+        const headers = ["Company Name", "Company Domain", "Industry", "Employees", "HQ", "CSR Details", "Contact Name", "Contact Title", "LinkedIn URL", "Contact Email"];
         let csv = headers.join(",") + "\n";
         currentLeads.forEach(lead => {
             const vals = headers.map(h => {

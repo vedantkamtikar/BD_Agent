@@ -13,6 +13,7 @@ HEADERS = [
     "Industry", 
     "Employees",
     "HQ",
+    "CSR Details",
     "Contact Name", 
     "Contact Title", 
     "LinkedIn URL",
@@ -174,6 +175,7 @@ class LeadLogger:
         # Align the entities for tabular format
         for company in companies:
             comp_contacts = contacts_by_company.get(company.name, [])
+            csr_text = getattr(company, "csr_details", None) or "N/A"
 
             if not comp_contacts:
                 # Scenario: No contacts found for this company (conditional skip triggered)
@@ -184,6 +186,7 @@ class LeadLogger:
                     company.industry or "N/A",
                     company.employee_count or "N/A",
                     company.headquarters or "N/A",
+                    csr_text,
                     "N/A (No contacts found)",
                     "N/A",
                     "N/A",
@@ -200,6 +203,7 @@ class LeadLogger:
                         company.industry or "N/A",
                         company.employee_count or "N/A",
                         company.headquarters or "N/A",
+                        csr_text,
                         contact.name,
                         contact.title or "N/A",
                         getattr(contact, "linkedin_url", None) or "N/A",
