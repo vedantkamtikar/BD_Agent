@@ -4,16 +4,76 @@ from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, F
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 import config
 
+import socket
+from urllib.parse import urlsplit, urlunsplit
+
 # Normalize Render/Heroku postgres:// URLs to postgresql://
 db_url = config.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 
+def resolve_render_internal_host(url: str) -> str:
+    """
+    If a Render private hostname (e.g. 'dpg-xxxx-a') fails internal DNS resolution,
+    attempt to auto-resolve using Render's regional external host suffixes.
+    """
+    if not (url.startswith("postgresql://") or url.startswith("postgresql+")):
+        return url
+    try:
+        parts = urlsplit(url)
+        netloc = parts.netloc
+        if "@" in netloc:
+            auth, host_port = netloc.rsplit("@", 1)
+        else:
+            auth, host_port = "", netloc
+
+        if ":" in host_port:
+            host, port_str = host_port.split(":", 1)
+            port_suffix = ":" + port_str
+        else:
+            host, port_suffix = host_port, ""
+
+        # Bare Render hostname without dots (e.g., 'dpg-da2be8ou01pc73b24r30-a')
+        if host.startswith("dpg-") and "." not in host:
+            orig_timeout = socket.getdefaulttimeout()
+            try:
+                socket.setdefaulttimeout(1.5)
+                try:
+                    socket.gethostbyname(host)
+                    return url  # Internal hostname resolves fine
+                except Exception:
+                    # Internal DNS failed; try known Render external regions
+                    candidates = [
+                        ".oregon-postgres.render.com",
+                        ".frankfurt-postgres.render.com",
+                        ".ohio-postgres.render.com",
+                        ".singapore-postgres.render.com",
+                        ".virginia-postgres.render.com"
+                    ]
+                    for suffix in candidates:
+                        try:
+                            candidate_host = host + suffix
+                            socket.gethostbyname(candidate_host)
+                            print(f"[Database] Render internal host '{host}' resolved to external host '{candidate_host}'")
+                            new_netloc = f"{auth}@{candidate_host}{port_suffix}" if auth else f"{candidate_host}{port_suffix}"
+                            return urlunsplit((parts.scheme, new_netloc, parts.path, parts.query, parts.fragment))
+                        except Exception:
+                            continue
+            finally:
+                socket.setdefaulttimeout(orig_timeout)
+    except Exception as exc:
+        print(f"[Database] Host resolution check notice: {exc}")
+    return url
+
+
+db_url = resolve_render_internal_host(db_url)
+
+
 def create_app_engine(url: str):
     """Initializes SQLAlchemy engine with resilient PostgreSQL driver fallback."""
     is_sqlite = url.startswith("sqlite")
-    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    connect_args = {"check_same_thread": False} if is_sqlite else {"connect_timeout": 10}
 
     try:
         eng = create_engine(url, connect_args=connect_args)
@@ -91,7 +151,22 @@ class LeadRow(Base):
 
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    global engine, db_url
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as exc:
+        print("\n" + "=" * 64)
+        print("[DATABASE WARNING] Could not initialize PostgreSQL connection:")
+        print(f"  Error: {exc}")
+        print("[DATABASE NOTICE] Resilient fallback: Initializing local SQLite database ('sqlite:///leads.db').")
+        print("NOTE: To use Render PostgreSQL, make sure DATABASE_URL in your Web Service")
+        print("      Environment is set to the 'External Database URL' from your Postgres dashboard.")
+        print("=" * 64 + "\n")
+        db_url = "sqlite:///leads.db"
+        engine = create_app_engine(db_url)
+        SessionLocal.configure(bind=engine)
+        Base.metadata.create_all(bind=engine)
+
     # Safe column migration check for existing SQLite and PostgreSQL databases
     try:
         with engine.connect() as conn:
