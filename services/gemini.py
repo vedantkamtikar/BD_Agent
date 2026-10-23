@@ -192,12 +192,14 @@ class GeminiService:
             revenue_markdown = self.serper.search(rev_search_query, num_results=max_results * 2)
             raw_markdown += "\n\n### Revenue & Financial Data (Supplementary Search)\n" + revenue_markdown
 
-        # Phase 3: Supplementary search for CSR focus or initiatives
+        # Phase 3: Supplementary search for CSR focus or initiatives (always run to ensure CSR grounding)
         if csr_focus:
             csr_search_query = f"{niche} companies {location} CSR corporate social responsibility foundation {csr_focus}"
-            print(f"[GeminiService] Step A3: Running dedicated CSR focus search: '{csr_search_query}'...")
-            csr_markdown = self.serper.search(csr_search_query, num_results=max_results * 2)
-            raw_markdown += "\n\n### CSR & Community Initiatives (Supplementary Search)\n" + csr_markdown
+        else:
+            csr_search_query = f"{niche} companies {location} CSR corporate social responsibility foundation initiatives"
+        print(f"[GeminiService] Step A3: Running dedicated CSR search: '{csr_search_query}'...")
+        csr_markdown = self.serper.search(csr_search_query, num_results=max_results * 2)
+        raw_markdown += "\n\n### CSR & Community Initiatives (Supplementary Search)\n" + csr_markdown
 
         print("[GeminiService] Step B: Extracting structured company list with CSR details from search output...")
         
@@ -242,7 +244,7 @@ class GeminiService:
         else:
             csr_instruction = (
                 f"\n\nCSR DETAILS EXTRACTION\n"
-                f"In the 'csr_details' field, concisely summarize the company's notable CSR programs, foundation work, or sustainability initiatives (e.g. 'Education & Skill Building', 'Rural Healthcare & Sanitation', 'Renewable Energy & Afforestation'). If not found in search results, use 'N/A'."
+                f"In the 'csr_details' field, concisely summarize the company's notable CSR programs, foundation work, or community/sustainability initiatives (e.g. 'Education & Skill Building', 'Rural Healthcare & Sanitation', 'Renewable Energy & Afforestation'). If not found in search results, use 'N/A'."
             )
 
         parse_prompt = ChatPromptTemplate.from_template(
@@ -304,9 +306,48 @@ class GeminiService:
                         print(f"[GeminiService] Could not find domain for '{comp.name}'.")
                 except Exception as e:
                     print(f"[GeminiService] Domain lookup error for '{comp.name}': {e}")
+
+        # CSR enrichment fallback: for companies where CSR was not captured in the batch search snippets,
+        # run a targeted search for the company's dedicated CSR/foundation programs
+        for comp in unique_companies:
+            if not comp.csr_details or comp.csr_details.strip().upper() in ("", "N/A", "NONE", "UNKNOWN"):
+                comp.csr_details = self._enrich_company_csr(comp, csr_focus=csr_focus)
             
         print(f"[GeminiService] Successfully discovered and structured {len(unique_companies)} unique companies.")
         return unique_companies
+
+    def _enrich_company_csr(self, company: Company, csr_focus: str = "") -> str:
+        """
+        Runs a targeted, dedicated search for a company's CSR/foundation initiatives
+        and extracts a concise summary of their social impact focus.
+        """
+        if not self.serper:
+            return company.csr_details or "N/A"
+        try:
+            focus_term = f" {csr_focus}" if csr_focus else ""
+            query = f'"{company.name}" CSR OR foundation OR "corporate social responsibility" initiatives{focus_term}'
+            print(f"[GeminiService] Performing dedicated CSR lookup for '{company.name}'...")
+            snippets = self.serper.search(query, num_results=3)
+            if snippets and len(snippets.strip()) > 40:
+                prompt = (
+                    f"You are a CSR intelligence analyst. Based on the following web search snippets for the company '{company.name}', "
+                    f"summarize their primary CSR (Corporate Social Responsibility) initiatives, foundation programs, or social impact areas in a single crisp phrase (5 to 15 words, e.g. 'Community empowerment, education, and rural healthcare initiatives'). "
+                    f"Do NOT include preambles, citations, or quotes. If no CSR or foundation initiatives are mentioned, respond with 'N/A'.\n\n"
+                    f"Search Snippets:\n{snippets}"
+                )
+                resp = self.llm_parse.invoke(prompt)
+                raw = resp.content
+                if isinstance(raw, list):
+                    text = "".join([p if isinstance(p, str) else p.get("text", "") for p in raw])
+                else:
+                    text = str(raw)
+                cleaned = text.strip().replace('"', '').replace("'", "").strip()
+                if cleaned and cleaned.upper() != "N/A" and len(cleaned) > 5:
+                    print(f"[GeminiService] Discovered CSR details for '{company.name}': {cleaned}")
+                    return cleaned
+        except Exception as err:
+            print(f"[GeminiService] Dedicated CSR lookup notice for '{company.name}': {err}")
+        return company.csr_details or "N/A"
 
     def _hunt_email_for_contact(
         self,
