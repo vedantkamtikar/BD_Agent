@@ -82,7 +82,7 @@ def main():
         "max_revenue": "",
         "csr_focus": csr_focus,
         "sender_name": "Alex",
-        "sender_title": "Lead Consultant",
+        "sender_title": "Partnership Lead",
         "tone": "formal",
         "draft_emails_enabled": True,
         "sync_gmail_drafts": False,

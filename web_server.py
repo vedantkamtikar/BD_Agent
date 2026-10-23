@@ -32,7 +32,7 @@ class RunRequest(BaseModel):
     max_revenue: str = ""
     csr_focus: str = ""
     sender_name: str = "Alex"
-    sender_title: str = "Lead Consultant"
+    sender_title: str = "Partnership Lead"
     tone: str = "formal"
     draft_emails_enabled: bool = True
     sync_gmail_drafts: bool = True

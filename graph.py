@@ -164,7 +164,7 @@ def draft_emails_node(state: LeadState) -> Dict[str, Any]:
     email_drafts = []
     
     sender_name = state.get("sender_name", "Alex")
-    sender_title = state.get("sender_title", "Lead Consultant")
+    sender_title = state.get("sender_title", "Partnership Lead")
     tone = state.get("tone", "formal")
     
     # Map companies by name for fast lookup

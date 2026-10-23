@@ -4,8 +4,8 @@
 
 1. OBJECTIVE
 --------------------------------------------------------------------------------
-The B2B Lead-Generation Agent is an autonomous pipeline built for sales, business
-development, and executive recruitment teams (e.g., Catenon). Given a target
+The B2B Lead-Generation Agent is an autonomous pipeline built for corporate
+partnerships, CSR teams, and NGO outreach programs. Given a target
 market niche, headquarters location, and revenue filters, it automatically:
   1. Discovers verified, headquartered companies in that vertical.
   2. Identifies key decision-makers (CEO, MD, CHRO) along with LinkedIn URLs.
@@ -42,7 +42,8 @@ The agent operates as a 4-stage sequential state machine managed by LangGraph:
 
   [03: draft_emails] (Conditional Edge)
   If email drafting is enabled and verified emails exist, Gemini crafts concise,
-  tailored outreach copy mentioning Catenon's executive search capabilities.
+  tailored outreach copy for CSR partnerships on behalf of an NGO outreach program,
+  requesting an introductory meeting/discussion.
   Enforces a strict 1-email-per-company rule targeting the senior-most executive.
 
   [04: create_gmail_drafts]

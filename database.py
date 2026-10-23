@@ -9,11 +9,32 @@ db_url = config.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(
-    db_url,
-    # SQLite requires connect_args={"check_same_thread": False} to run in background tasks
-    connect_args={"check_same_thread": False} if db_url.startswith("sqlite") else {}
-)
+
+def create_app_engine(url: str):
+    """Initializes SQLAlchemy engine with resilient PostgreSQL driver fallback."""
+    is_sqlite = url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+
+    try:
+        eng = create_engine(url, connect_args=connect_args)
+        if not is_sqlite:
+            # Eagerly verify dbapi driver is importable
+            _ = eng.dialect.dbapi
+        return eng
+    except Exception as exc:
+        if "psycopg" in str(exc).lower() and url.startswith("postgresql"):
+            if "postgresql+psycopg://" in url:
+                fallback_url = url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+            elif "postgresql+psycopg2://" in url:
+                fallback_url = url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+            else:
+                fallback_url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            print(f"[Database] Notice: Driver fallback triggered ({exc}). Trying: {fallback_url.split('@')[-1]}")
+            return create_engine(fallback_url, connect_args=connect_args)
+        raise exc
+
+
+engine = create_app_engine(db_url)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -71,7 +92,7 @@ class LeadRow(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-    # Safe SQLite column migration check for existing databases
+    # Safe column migration check for existing SQLite and PostgreSQL databases
     try:
         with engine.connect() as conn:
             from sqlalchemy import text
@@ -86,5 +107,9 @@ def init_db():
                 if run_columns and "csr_focus" not in run_columns:
                     conn.execute(text("ALTER TABLE campaign_runs ADD COLUMN csr_focus VARCHAR(255) DEFAULT ''"))
                     conn.commit()
+            elif "postgres" in db_url:
+                conn.execute(text("ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS csr_details TEXT DEFAULT 'N/A'"))
+                conn.execute(text("ALTER TABLE campaign_runs ADD COLUMN IF NOT EXISTS csr_focus VARCHAR(255) DEFAULT ''"))
+                conn.commit()
     except Exception as e:
         print(f"[DB Init Notice] Migration check: {e}")

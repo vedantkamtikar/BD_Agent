@@ -606,48 +606,69 @@ class GeminiService:
         return enriched_contacts
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15), reraise=True, before_sleep=before_sleep_log(logger, logging.WARNING))
-    def draft_outreach_email(self, company: Company, contact: Contact, sender_name: str = "Alex", sender_title: str = "Lead Consultant", tone: str = "formal") -> EmailDraft:
+    def draft_outreach_email(self, company: Company, contact: Contact, sender_name: str = "Alex", sender_title: str = "Outreach Lead", tone: str = "formal") -> EmailDraft:
         """
-        Drafts a highly personalized B2B cold outreach email targeting a specific contact
-        at a target company, matching the EmailDraft schema.
+        Drafts a highly personalized CSR outreach email for an NGO outreach program
+        targeting a specific contact at a target company, proposing collaboration and requesting a meeting/discussion.
         """
         # Map tone to style instructions
         tone_styles = {
-            "formal": "Professional, structured, and courteous. Use formal language and a respectful tone.",
-            "conversational": "Friendly, warm, and human-sounding. Write like a real person, not a template. Use casual but professional language.",
-            "bold": "Direct, confident, and slightly provocative. Lead with a bold statement or challenge. Be assertive and cut through the noise."
+            "formal": "Professional, structured, and courteous. Respectful of executive leadership while clearly articulating mission and social value.",
+            "conversational": "Warm, inspiring, and human-sounding. Write with authentic passion for community impact rather than corporate jargon.",
+            "bold": "Purpose-driven, direct, and compelling. Lead with high conviction around community impact and meaningful social transformation."
         }
         style_instruction = tone_styles.get(tone, tone_styles["formal"])
 
+        has_csr = bool(company.csr_details and company.csr_details not in ("N/A", "unknown", "None", ""))
+        csr_details_str = company.csr_details if has_csr else "social responsibility and community initiatives"
+
         if config.MOCK_LLM:
-            print(f"[GeminiService] [MOCK MODE] Simulating outreach email for '{contact.name}' at '{company.name}' (tone: {tone})...")
+            print(f"[GeminiService] [MOCK MODE] Simulating CSR outreach email for '{contact.name}' at '{company.name}' (tone: {tone})...")
+            csr_mention = f" regarding {company.name}'s inspiring work in {csr_details_str}." if has_csr else f" regarding potential CSR collaboration with {company.name}."
             return EmailDraft(
                 contact_name=contact.name,
                 contact_email=contact.email or "unknown@email.com",
-                subject=f"Executive Search / Talent Acquisition for {company.name}",
+                subject=f"CSR Partnership & Community Impact Discussion — {company.name}",
                 body=(
-                    f"Hi {contact.name},\n\n"
-                    f"I'm reaching out from Catenon, a global executive search firm. I noticed {company.name}'s recent work in the {company.industry or 'tech'} sector.\n\n"
-                    f"Given your role as {contact.title or 'Executive'}, I wanted to see if you have 10 minutes next Tuesday for a brief chat about your upcoming leadership/hiring needs.\n\n"
-                    f"Best,\n{sender_name}\n{sender_title}"
+                    f"Dear {contact.name},\n\n"
+                    f"I am reaching out from our NGO outreach program{csr_mention} We lead high-impact grassroots initiatives focused on sustainable community development.\n\n"
+                    f"Given your leadership at {company.name}, we would welcome the opportunity to explore synergistic CSR partnership opportunities that amplify positive social outcomes.\n\n"
+                    f"Could we schedule a brief 15-minute introductory meeting or discussion next week to share our initiative overview and explore potential alignment?\n\n"
+                    f"Best regards,\n{sender_name}\n{sender_title}"
                 ),
                 company_name=company.name
             )
 
-        print(f"[GeminiService] Drafting outreach email to '{contact.name}' ({contact.title or 'Executive'}) at '{company.name}' (tone: {tone})...")
+        print(f"[GeminiService] Drafting CSR outreach email to '{contact.name}' ({contact.title or 'Executive'}) at '{company.name}' (tone: {tone})...")
         
-        first_name = contact.name.split()[0] if contact.name else "there"
+        # Determine appropriate salutation name (skipping standalone initials or honorifics)
+        salutation_name = contact.name.strip() if contact.name else "there"
+        if contact.name:
+            clean_name = re.sub(r'^(dr\.|mr\.|ms\.|mrs\.|prof\.)\s+', '', contact.name.strip(), flags=re.IGNORECASE)
+            tokens = clean_name.split()
+            valid_tokens = [t for t in tokens if len(re.sub(r'[^a-zA-Z]', '', t)) > 1]
+            salutation_name = valid_tokens[0] if valid_tokens else contact.name.strip()
+
+        csr_context_prompt = f"Known Company CSR Initiatives: {company.csr_details}\n" if has_csr else ""
+
         email_prompt = (
-            f"You are a professional B2B cold email copywriter. Write a highly personalized, extremely short, and direct "
-            f"outreach email to {contact.name} ({contact.title or 'executive'}) at {company.name} (website: {company.domain or 'unknown'}).\n\n"
-            f"The sender is {sender_name} ({sender_title}) from Catenon, a global executive search firm.\n\n"
+            f"You are a professional outreach copywriter representing an NGO outreach program. Write a highly personalized, "
+            f"concise, and persuasive CSR partnership outreach email to {contact.name} ({contact.title or 'Executive'}) "
+            f"at {company.name} (website: {company.domain or 'unknown'}).\n\n"
+            f"{csr_context_prompt}"
+            f"The sender is {sender_name} ({sender_title}) representing an NGO outreach program dedicated to grassroots social impact.\n\n"
             f"Guidelines:\n"
-            f"1. Subject line: Catchy, highly relevant, and professional. Mention Catenon or Executive Search/Talent Acquisition.\n"
-            f"2. Email body: Keep it very short, concise, and direct (under 80 words). State clearly that the sender is from Catenon (global executive search firm) and get straight to the point.\n"
-            f"3. Tone & Style: {style_instruction}\n"
-            f"4. FORMATTING & LINE BREAKS (CRITICAL):\n"
-            f"   - Greeting on its own line: 'Dear {first_name},' or 'Hi {first_name},'\n"
+            f"1. Context & Purpose: Outreach on behalf of an NGO outreach program to explore a Corporate Social Responsibility (CSR) partnership or collaboration with {company.name}.\n"
+            f"2. CSR Relevance: Acknowledge {company.name}'s social responsibility commitment"
+            + (f" and specifically reference their initiatives in '{company.csr_details}'." if has_csr else ", connecting their values with impactful community development.")
+            + f"\n3. MANDATORY MEETING REQUEST: You MUST explicitly include a clear, courteous request to schedule a brief 10 to 15-minute introductory meeting or discussion next week to explore potential collaboration and mutual community impact.\n"
+            f"4. Length & Brevity: Keep the body text concise and direct (under 90 words). Avoid generic fluff or long preambles.\n"
+            f"5. Subject Line: Catchy, highly relevant, and professional. Specifically mention CSR partnership, community impact, or a brief discussion for {company.name}.\n"
+            f"6. Tone & Style: {style_instruction}\n"
+            f"7. FORMATTING & LINE BREAKS (CRITICAL):\n"
+            f"   - Greeting on its own line: 'Dear {salutation_name},' or 'Hi {salutation_name},'\n"
             f"   - Blank line before the body paragraph.\n"
+            f"   - Blank line before the meeting request.\n"
             f"   - Blank line before the sign-off.\n"
             f"   - Sign-off and sender info MUST be on separate lines:\n"
             f"     Best regards,\n"
