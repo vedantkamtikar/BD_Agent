@@ -236,6 +236,11 @@ def serve_index():
     return JSONResponse(status_code=404, content={"message": "Frontend not found."})
 
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
 @app.post("/api/run")
 def trigger_run(request: RunRequest, background_tasks: BackgroundTasks):
     if not request.niche:
